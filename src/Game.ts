@@ -3,6 +3,7 @@ import { Renderer } from './renderer/Renderer';
 import { InputManager } from './renderer/InputManager';
 import { Hud } from './ui/Hud';
 import { UIManager } from './ui/UIManager';
+import { Minimap } from './ui/Minimap';
 import { SaveSystem } from './core/SaveSystem';
 import { ProfileStore } from './core/Profile';
 import { GameSettings } from './core/Settings';
@@ -16,6 +17,7 @@ export class Game {
   readonly input: InputManager;
   readonly hud: Hud;
   readonly ui: UIManager;
+  readonly minimap: Minimap;
 
   private running = false;
   private lastTime = 0;
@@ -36,6 +38,8 @@ export class Game {
     this.input.setGame(this);
     this.hud = new Hud();
     this.hud.setVisible(false);
+    this.minimap = new Minimap();
+    this.minimap.setVisible(false);
 
     this.ui = new UIManager({
       onNewGame: (nation) => this.newGame(nation),
@@ -70,6 +74,7 @@ export class Game {
     this.endRecorded = false;
     this.ui.show('none');
     this.hud.setVisible(true);
+    this.minimap.setVisible(true);
     this.ui.showToast(`Playing as ${n} — ${this.simulation.getCurrentEpochName()}`);
   }
 
@@ -84,6 +89,7 @@ export class Game {
     this.endRecorded = false;
     this.ui.show('none');
     this.hud.setVisible(true);
+    this.minimap.setVisible(true);
     this.ui.showToast(`Loaded slot ${slot}`);
   }
 
@@ -99,6 +105,7 @@ export class Game {
     this.mode = 'paused';
     this.ui.show('pause');
     this.hud.setVisible(false);
+    this.minimap.setVisible(false);
   }
 
   resume() {
@@ -106,11 +113,13 @@ export class Game {
     this.mode = 'playing';
     this.ui.show('none');
     this.hud.setVisible(true);
+    this.minimap.setVisible(true);
   }
 
   quitToMenu() {
     this.mode = 'menu';
     this.hud.setVisible(false);
+    this.minimap.setVisible(false);
     this.ui.show('main');
   }
 
@@ -155,6 +164,7 @@ export class Game {
       if (outcome === 'victory' || outcome === 'defeat') {
         this.mode = 'ended';
         this.hud.setVisible(false);
+        this.minimap.setVisible(false);
         if (!this.endRecorded) {
           ProfileStore.recordGameEnd(outcome === 'victory', this.simulation.time);
           this.endRecorded = true;
@@ -168,6 +178,7 @@ export class Game {
 
     if (this.mode === 'playing') {
       this.hud.update(this.simulation, this.ui.getSettings().showFPS ? this.fps : undefined);
+      this.minimap.update(this.simulation);
     }
 
     requestAnimationFrame(this.loop);
