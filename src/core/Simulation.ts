@@ -76,6 +76,9 @@ export class Simulation {
   aiFood = 180;
   aiTimber = 160;
   aiMetal = 60;
+  aiWealth = 100;
+  aiKnowledge = 50;
+  aiEpochIndex = 0;
   // private aiPhase: 'build' | 'train' | 'attack' = 'build';
   aiTimer = 5;
   aiWaveTimer = 45;
@@ -108,6 +111,9 @@ export class Simulation {
     this.aiFood = 180;
     this.aiTimber = 160;
     this.aiMetal = 60;
+    this.aiWealth = 100;
+    this.aiKnowledge = 50;
+    this.aiEpochIndex = 0;
     // this.aiPhase = 'build';
     this.lastTrainComplete = false;
   }
@@ -390,6 +396,8 @@ export class Simulation {
     this.aiFood += (2.5 + aiFarms * 1.5) * dt;
     this.aiTimber += 1.8 * dt;
     this.aiMetal += 0.6 * dt;
+    this.aiWealth += 0.8 * dt;
+    this.aiKnowledge += 0.5 * dt;
 
     // Fog exploration + general auras
     this.exploreTimer += 1 / 20; // approx if fixed 20Hz
@@ -1132,6 +1140,48 @@ export class Simulation {
     const mul = this.getBonuses().attackMul;
     for (const u of this.units.values()) {
       if (u.nation !== this.playerNation) continue;
+      const base = UNIT_STATS[u.type]?.attack ?? u.attack;
+      u.attack = base * mul;
+    }
+    return true;
+  }
+
+  canAdvanceEpoch(): boolean {
+    const epochs = NATIONS[this.playerNation].epochs;
+    if (this.epochIndex >= epochs.length - 1) return false;
+    const next = epochs[this.epochIndex + 1];
+    return (
+      this.resources.knowledge >= next.knowledgeCost &&
+      this.resources.wealth >= next.wealthCost
+    );
+  }
+
+  getNextEpochDef() {
+    const epochs = NATIONS[this.playerNation].epochs;
+    if (this.epochIndex >= epochs.length - 1) return null;
+    return epochs[this.epochIndex + 1];
+  }
+
+  tryAIAdvanceEpoch(): boolean {
+    // Only advance if there is still an active enemy city
+    const hasEnemyCity = [...this.buildings.values()].some(
+      (b) => b.type === 'city_center' && b.nation !== this.playerNation
+    );
+    if (!hasEnemyCity) return false;
+    const nation = this.enemyNation() as NationId;
+    const epochs = NATIONS[nation]?.epochs;
+    if (!epochs) return false;
+    if (this.aiEpochIndex >= epochs.length - 1) return false;
+    const next = epochs[this.aiEpochIndex + 1];
+    if (this.aiKnowledge < next.knowledgeCost) return false;
+    if (this.aiWealth < next.wealthCost) return false;
+    this.aiKnowledge -= next.knowledgeCost;
+    this.aiWealth -= next.wealthCost;
+    this.aiEpochIndex += 1;
+    // Apply updated attack multiplier to all existing AI units
+    const mul = getActiveBonuses(nation, this.aiEpochIndex).attackMul;
+    for (const u of this.units.values()) {
+      if (u.nation !== nation) continue;
       const base = UNIT_STATS[u.type]?.attack ?? u.attack;
       u.attack = base * mul;
     }

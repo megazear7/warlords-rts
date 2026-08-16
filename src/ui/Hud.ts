@@ -8,6 +8,7 @@ export class Hud {
   private selectionEl: HTMLElement;
   private researchEl: HTMLElement;
   private epochEl: HTMLElement;
+  private epochNextEl: HTMLElement;
   private unitsEl: HTMLElement;
   private fpsEl: HTMLElement;
   private marketEl: HTMLElement;
@@ -24,6 +25,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="hud-title"><strong>Warlords</strong> <span id="hud-fps"></span></div>
       <div class="hud-epoch" id="hud-epoch"></div>
+      <div id="hud-epoch-next" style="font-size:12px; margin-bottom:2px; color:#ccc;"></div>
       <div class="hud-resources" id="hud-resources"></div>
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
@@ -43,6 +45,7 @@ export class Hud {
     this.selectionEl = document.getElementById('hud-selection') as HTMLElement;
     this.researchEl = document.getElementById('hud-research') as HTMLElement;
     this.epochEl = document.getElementById('hud-epoch') as HTMLElement;
+    this.epochNextEl = document.getElementById('hud-epoch-next') as HTMLElement;
     this.unitsEl = document.getElementById('hud-units') as HTMLElement;
     this.fpsEl = document.getElementById('hud-fps') as HTMLElement;
     this.marketEl = document.getElementById('hud-market') as HTMLElement;
@@ -61,6 +64,26 @@ export class Hud {
     const cityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation === sim.playerNation).length;
 
     this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.cityLimit}`;
+
+    const nextEpoch = sim.getNextEpochDef();
+    if (nextEpoch) {
+      const canAdvance = sim.canAdvanceEpoch();
+      const b = nextEpoch.bonuses;
+      const bonusParts: string[] = [];
+      if (b.attackMul) bonusParts.push(`atk ×${b.attackMul}`);
+      if (b.gatherMul) bonusParts.push(`gather ×${b.gatherMul}`);
+      if (b.researchSpeedMul) bonusParts.push(`research ×${b.researchSpeedMul}`);
+      if (b.attritionResist) bonusParts.push(`attrition −${Math.round(b.attritionResist * 100)}%`);
+      if (b.popCapBonus) bonusParts.push(`+${b.popCapBonus} pop`);
+      const bonusStr = bonusParts.length ? ` [${bonusParts.join(', ')}]` : '';
+      const readyMark = canAdvance ? ' ✅ press E' : '';
+      this.epochNextEl.textContent =
+        `Next: ${nextEpoch.name} · 📚 ${nextEpoch.knowledgeCost} 💰 ${nextEpoch.wealthCost}${bonusStr}${readyMark}`;
+      this.epochNextEl.style.color = canAdvance ? '#ffe97a' : '#aaa';
+    } else {
+      this.epochNextEl.textContent = 'Max epoch reached';
+      this.epochNextEl.style.color = '#88ff88';
+    }
 
     this.resourcesEl.innerHTML = `
       <span>🌾 ${Math.floor(r.food)}</span>
