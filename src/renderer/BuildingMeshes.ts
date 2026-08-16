@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { Building } from '../core/Simulation';
 
-/**
- * Visual representation of buildings.
- */
 export class BuildingMeshes {
   private group = new THREE.Group();
   private meshes = new Map<string, THREE.Object3D>();
@@ -12,7 +9,7 @@ export class BuildingMeshes {
     scene.add(this.group);
   }
 
-  sync(buildings: Building[]) {
+  sync(buildings: Building[], selectedBuildingId: string | null) {
     const seen = new Set<string>();
 
     for (const b of buildings) {
@@ -26,6 +23,13 @@ export class BuildingMeshes {
       }
 
       mesh.position.set(b.position.x, b.position.y, b.position.z);
+
+      // Selection highlight
+      const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
+      if (ring) {
+        const mat = ring.material as THREE.MeshBasicMaterial;
+        mat.opacity = selectedBuildingId === b.id ? 0.7 : 0;
+      }
     }
 
     for (const [id, mesh] of this.meshes) {
@@ -40,54 +44,46 @@ export class BuildingMeshes {
     const group = new THREE.Group();
 
     if (b.type === 'city_center') {
-      const baseGeo = new THREE.BoxGeometry(6, 3.5, 6);
-      const baseMat = new THREE.MeshStandardMaterial({
-        color: 0x8b7355,
-        roughness: 0.85,
-      });
-      const base = new THREE.Mesh(baseGeo, baseMat);
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 3.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 0.85 })
+      );
       base.position.y = 1.75;
       base.castShadow = true;
       base.receiveShadow = true;
       group.add(base);
 
-      const topGeo = new THREE.BoxGeometry(4.2, 2.2, 4.2);
-      const topMat = new THREE.MeshStandardMaterial({
-        color: 0x9c8466,
-        roughness: 0.8,
-      });
-      const top = new THREE.Mesh(topGeo, topMat);
+      const top = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 2.2, 4.2),
+        new THREE.MeshStandardMaterial({ color: 0x9c8466, roughness: 0.8 })
+      );
       top.position.y = 4.6;
       top.castShadow = true;
       group.add(top);
 
-      const roofGeo = new THREE.ConeGeometry(3.4, 1.8, 4);
-      const roofMat = new THREE.MeshStandardMaterial({
-        color: 0x6b3a2a,
-        roughness: 0.9,
-      });
-      const roof = new THREE.Mesh(roofGeo, roofMat);
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(3.4, 1.8, 4),
+        new THREE.MeshStandardMaterial({ color: 0x6b3a2a, roughness: 0.9 })
+      );
       roof.position.y = 6.6;
       roof.rotation.y = Math.PI / 4;
       roof.castShadow = true;
       group.add(roof);
 
-      const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 3.5, 6);
-      const poleMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-      const pole = new THREE.Mesh(poleGeo, poleMat);
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.06, 3.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0x444444 })
+      );
       pole.position.set(1.8, 8.2, 1.8);
       group.add(pole);
 
-      const flagGeo = new THREE.PlaneGeometry(1.4, 0.9);
-      const flagMat = new THREE.MeshStandardMaterial({
-        color: 0xb22222,
-        side: THREE.DoubleSide,
-      });
-      const flag = new THREE.Mesh(flagGeo, flagMat);
+      const flag = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.4, 0.9),
+        new THREE.MeshStandardMaterial({ color: 0xb22222, side: THREE.DoubleSide })
+      );
       flag.position.set(2.5, 9.0, 1.8);
       group.add(flag);
     } else if (b.type === 'farm') {
-      // Simple farm plot + shed
       const plot = new THREE.Mesh(
         new THREE.BoxGeometry(5, 0.15, 5),
         new THREE.MeshStandardMaterial({ color: 0x6b8f3a, roughness: 0.95 })
@@ -96,7 +92,6 @@ export class BuildingMeshes {
       plot.receiveShadow = true;
       group.add(plot);
 
-      // Crop rows
       for (let i = -1; i <= 1; i++) {
         const row = new THREE.Mesh(
           new THREE.BoxGeometry(4, 0.35, 0.6),
@@ -106,7 +101,6 @@ export class BuildingMeshes {
         group.add(row);
       }
 
-      // Small shed
       const shed = new THREE.Mesh(
         new THREE.BoxGeometry(1.8, 1.6, 1.6),
         new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.9 })
@@ -114,16 +108,97 @@ export class BuildingMeshes {
       shed.position.set(2.2, 0.8, 2.0);
       shed.castShadow = true;
       group.add(shed);
+    } else if (b.type === 'barracks') {
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 2.8, 5),
+        new THREE.MeshStandardMaterial({ color: 0x6b5a4a, roughness: 0.85 })
+      );
+      base.position.y = 1.4;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      group.add(base);
+
+      // Training yard posts
+      for (const [x, z] of [
+        [-2, -2],
+        [2, -2],
+        [-2, 2],
+        [2, 2],
+      ] as [number, number][]) {
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.12, 2.2, 6),
+          new THREE.MeshStandardMaterial({ color: 0x4a3a2a })
+        );
+        post.position.set(x, 1.1, z);
+        group.add(post);
+      }
+
+      // Red banner
+      const banner = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.2, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x8b0000, side: THREE.DoubleSide })
+      );
+      banner.position.set(0, 3.5, -2.6);
+      group.add(banner);
+    } else if (b.type === 'library') {
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(4.5, 2.5, 4.5),
+        new THREE.MeshStandardMaterial({ color: 0x7a8a9a, roughness: 0.7 })
+      );
+      base.position.y = 1.25;
+      base.castShadow = true;
+      group.add(base);
+
+      // Dome / roof
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.5, metalness: 0.2 })
+      );
+      dome.position.y = 2.5;
+      dome.castShadow = true;
+      group.add(dome);
+
+      // Columns
+      for (const [x, z] of [
+        [-1.8, -1.8],
+        [1.8, -1.8],
+        [-1.8, 1.8],
+        [1.8, 1.8],
+      ] as [number, number][]) {
+        const col = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.2, 0.22, 2.5, 8),
+          new THREE.MeshStandardMaterial({ color: 0xd4c4a8 })
+        );
+        col.position.set(x, 1.25, z);
+        group.add(col);
+      }
     } else {
-      const geo = new THREE.BoxGeometry(3, 2.5, 3);
-      const mat = new THREE.MeshStandardMaterial({ color: 0x7a6a55 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 2.5, 3),
+        new THREE.MeshStandardMaterial({ color: 0x7a6a55 })
+      );
       mesh.position.y = 1.25;
       mesh.castShadow = true;
       group.add(mesh);
     }
 
+    // Selection ring for buildings
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(3.2, 3.6, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x44aaff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.1;
+    group.add(ring);
+
     group.userData.buildingId = b.id;
+    group.userData.selectionRing = ring;
     return group;
   }
 }
