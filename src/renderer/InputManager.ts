@@ -35,6 +35,9 @@ export class InputManager {
   private attackMoveMode = false;
   /** C-key found-city mode (next ground right-click) */
   private foundCityMode = false;
+  /** Double-tap detection for control groups */
+  private lastGroupKeyTime = 0;
+  private lastGroupKeySlot = -1;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -151,7 +154,22 @@ export class InputManager {
           e.preventDefault();
           return;
         }
-        sim.selectControlGroup(slot);
+        const additive = e.shiftKey;
+        sim.selectControlGroup(slot, additive);
+
+        // Double-tap: center camera on group within 300 ms
+        const now = performance.now();
+        if (!additive && this.lastGroupKeySlot === slot && now - this.lastGroupKeyTime < 300) {
+          const center = sim.getControlGroupCenter(slot);
+          if (center) {
+            this.renderer.cameraTarget.set(center.x, 0, center.z);
+          }
+          this.lastGroupKeySlot = -1;
+          this.lastGroupKeyTime = 0;
+        } else {
+          this.lastGroupKeyTime = now;
+          this.lastGroupKeySlot = slot;
+        }
         return;
       }
 

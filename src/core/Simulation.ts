@@ -751,14 +751,54 @@ export class Simulation {
     this.controlGroups.set(slot, [...this.selected]);
   }
 
-  selectControlGroup(slot: number) {
+  private isLivingPlayerUnit(id: EntityId): boolean {
+    const u = this.units.get(id);
+    return !!(u && u.hp > 0 && u.nation === this.playerNation);
+  }
+
+  selectControlGroup(slot: number, additive = false) {
     const ids = this.controlGroups.get(slot);
     if (!ids || ids.length === 0) return;
-    this.selected.clear();
-    this.selectedBuildingId = null;
-    for (const id of ids) {
-      if (this.units.has(id)) this.selected.add(id);
+    if (!additive) {
+      this.selected.clear();
+      this.selectedBuildingId = null;
     }
+    const alive: EntityId[] = [];
+    for (const id of ids) {
+      if (this.isLivingPlayerUnit(id)) {
+        this.selected.add(id);
+        alive.push(id);
+      }
+    }
+    // Prune dead/missing ids in-place so future selects stay clean
+    this.controlGroups.set(slot, alive);
+  }
+
+  /** Returns the average world position of living units in a control group, or null if empty. */
+  getControlGroupCenter(slot: number): { x: number; z: number } | null {
+    const ids = this.controlGroups.get(slot);
+    if (!ids || ids.length === 0) return null;
+    let sx = 0, sz = 0, count = 0;
+    for (const id of ids) {
+      const u = this.units.get(id);
+      if (this.isLivingPlayerUnit(id) && u) {
+        sx += u.position.x;
+        sz += u.position.z;
+        count++;
+      }
+    }
+    return count > 0 ? { x: sx / count, z: sz / count } : null;
+  }
+
+  /** Returns which slots (0–9) have at least one living unit assigned. */
+  getPopulatedControlGroups(): Set<number> {
+    const result = new Set<number>();
+    for (const [slot, ids] of this.controlGroups) {
+      if (ids.some((id) => this.isLivingPlayerUnit(id))) {
+        result.add(slot);
+      }
+    }
+    return result;
   }
 
   selectAllOfType(type: string) {
