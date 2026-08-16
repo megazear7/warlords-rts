@@ -5,6 +5,7 @@ import { UnitMeshes } from './UnitMeshes';
 import { BuildingMeshes } from './BuildingMeshes';
 import { ResourceMeshes } from './ResourceMeshes';
 import { TerritoryMeshes } from './TerritoryMeshes';
+import { FogMeshes } from './FogMeshes';
 
 export class Renderer {
   readonly scene: THREE.Scene;
@@ -15,6 +16,7 @@ export class Renderer {
   private buildingMeshes: BuildingMeshes;
   private resourceMeshes: ResourceMeshes;
   private territoryMeshes: TerritoryMeshes;
+  private fogMeshes: FogMeshes;
 
   cameraTarget = new THREE.Vector3(0, 0, 0);
   cameraDistance = 55;
@@ -58,12 +60,13 @@ export class Renderer {
     sun.shadow.camera.bottom = -80;
     this.scene.add(sun);
 
-    createTerrain(this.scene);
+    this.scene.add(createTerrain());
 
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
     this.resourceMeshes = new ResourceMeshes(this.scene);
     this.territoryMeshes = new TerritoryMeshes(this.scene);
+    this.fogMeshes = new FogMeshes(this.scene);
 
     window.addEventListener('resize', () => this.onResize(container));
   }
@@ -77,9 +80,13 @@ export class Renderer {
   }
 
   updateCamera() {
-    const x = this.cameraTarget.x + this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
+    const x =
+      this.cameraTarget.x +
+      this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
     const y = this.cameraTarget.y + this.cameraDistance * Math.cos(this.cameraPhi);
-    const z = this.cameraTarget.z + this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
+    const z =
+      this.cameraTarget.z +
+      this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.cameraTarget);
   }
@@ -88,13 +95,23 @@ export class Renderer {
     this.updateCamera();
 
     this.territoryMeshes.sync(sim);
-    // Fog of war: hide enemy units outside current player vision
+
     const visibleUnits = sim.getAllUnits().filter(
       (u) => u.nation === sim.playerNation || sim.isVisibleToPlayer(u.position)
     );
     this.unitMeshes.sync(visibleUnits, sim.selected);
-    this.buildingMeshes.sync(sim.getAllBuildings(), sim.selectedBuildingId);
-    this.resourceMeshes.sync(sim.getAllResourceNodes());
+
+    const visibleBuildings = sim.getAllBuildings().filter(
+      (b) => b.nation === sim.playerNation || sim.isVisibleToPlayer(b.position)
+    );
+    this.buildingMeshes.sync(visibleBuildings, sim.selectedBuildingId);
+
+    const visibleResources = sim
+      .getAllResourceNodes()
+      .filter((n) => n.amount > 0 && sim.isExplored(n.position));
+    this.resourceMeshes.sync(visibleResources);
+
+    this.fogMeshes.sync(sim);
 
     this.renderer.render(this.scene, this.camera);
   }
