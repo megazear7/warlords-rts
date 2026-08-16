@@ -50,13 +50,37 @@ export class SimulationAI {
       return;
     }
 
-    // 3) Train
+    // 3) Gather per-nation unit info in one pass
+    let generalCount = 0;
+    let aiGeneral: Unit | null = null;
+    let fighterSumX = 0;
+    let fighterSumZ = 0;
+    let fighterCount = 0;
+    for (const u of s.units.values()) {
+      if (u.nation !== nation || u.hp <= 0) continue;
+      if (u.type === 'general') {
+        generalCount++;
+        aiGeneral = u;
+      } else if (u.type !== 'supply_wagon') {
+        fighterSumX += u.position.x;
+        fighterSumZ += u.position.z;
+        fighterCount++;
+      }
+    }
+
+    // Train from barracks
     const barracks = [...s.buildings.values()].find(
       (b) => b.type === 'barracks' && b.nation === nation
     );
     if (barracks && (barracks.productionTimer == null || barracks.productionTimer <= 0)) {
       const army = s.countUnitsOf(nation);
-      if (army < 18 && s.aiFood >= 55) {
+      // Train a general first when army is large enough (max 1 for AI)
+      if (generalCount < 1 && army >= 6 && s.aiFood >= 120 && s.aiMetal >= 80) {
+        s.aiFood -= 120;
+        s.aiMetal -= 80;
+        barracks.productionType = 'general';
+        barracks.productionTimer = 20;
+      } else if (army < 18 && s.aiFood >= 55) {
         s.aiFood -= 55;
         barracks.productionType = 'enemy_warrior';
         barracks.productionTimer = 11;
@@ -68,6 +92,17 @@ export class SimulationAI {
             z: pc.position.z + (Math.random() - 0.5) * 12,
           };
         }
+      }
+    }
+
+    // Keep general near army center
+    if (aiGeneral && fighterCount > 0) {
+      const cx = fighterSumX / fighterCount;
+      const cz = fighterSumZ / fighterCount;
+      const dx = cx - aiGeneral.position.x;
+      const dz = cz - aiGeneral.position.z;
+      if (dx * dx + dz * dz > 64) {
+        aiGeneral.target = { x: cx, y: 0, z: cz };
       }
     }
 
