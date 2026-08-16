@@ -27,10 +27,59 @@ const TRACK_META: Record<ResearchTrack, { label: string; icon: string; effect: s
 
 const TRACKS: ResearchTrack[] = ['science', 'civic', 'military', 'commerce'];
 
+/**
+ * A snapshot of the research state used to detect when a re-render is needed,
+ * so we avoid rebuilding the entire DOM subtree every animation frame.
+ */
+interface RenderSnapshot {
+  science: number;
+  civic: number;
+  military: number;
+  commerce: number;
+  current: string | undefined;
+  progressPct: number;
+  hasLibrary: boolean;
+  knowledge: number;
+  wealth: number;
+}
+
+function snapshotFrom(sim: Simulation): RenderSnapshot {
+  const rs = sim.research;
+  const hasLibrary = sim.getAllBuildings().some(
+    (b) => b.type === 'library' && b.nation === sim.playerNation
+  );
+  return {
+    science: rs.science,
+    civic: rs.civic,
+    military: rs.military,
+    commerce: rs.commerce,
+    current: rs.current,
+    progressPct: Math.floor(rs.progress * 100),
+    hasLibrary,
+    knowledge: Math.floor(sim.resources.knowledge),
+    wealth: Math.floor(sim.resources.wealth),
+  };
+}
+
+function snapshotsEqual(a: RenderSnapshot, b: RenderSnapshot): boolean {
+  return (
+    a.science === b.science &&
+    a.civic === b.civic &&
+    a.military === b.military &&
+    a.commerce === b.commerce &&
+    a.current === b.current &&
+    a.progressPct === b.progressPct &&
+    a.hasLibrary === b.hasLibrary &&
+    a.knowledge === b.knowledge &&
+    a.wealth === b.wealth
+  );
+}
+
 export class ResearchPanel {
   private root: HTMLElement;
   private visible = false;
   private onResearch?: (track: ResearchTrack) => void;
+  private lastSnapshot: RenderSnapshot | null = null;
 
   constructor() {
     this.root = document.createElement('div');
@@ -59,11 +108,20 @@ export class ResearchPanel {
   hide() {
     this.visible = false;
     this.root.style.display = 'none';
+    this.lastSnapshot = null;
   }
 
   update(sim: Simulation) {
     if (!this.visible) return;
 
+    const snapshot = snapshotFrom(sim);
+    if (this.lastSnapshot && snapshotsEqual(this.lastSnapshot, snapshot)) return;
+    this.lastSnapshot = snapshot;
+
+    this.render(sim, snapshot);
+  }
+
+  private render(sim: Simulation, snapshot: RenderSnapshot) {
     const rs = sim.research;
     const inProgress = rs.current;
 
@@ -78,7 +136,7 @@ export class ResearchPanel {
 
       let btnLabel = 'Research';
       if (isMaxed) btnLabel = 'Maxed';
-      else if (isActive) btnLabel = `${Math.floor(rs.progress * 100)}%…`;
+      else if (isActive) btnLabel = `${snapshot.progressPct}%…`;
 
       const costStr = isMaxed ? '—' : `📚 ${cost.knowledge}  💰 ${cost.wealth}`;
       const disabledAttr = (canResearch && !isActive && !isMaxed) ? '' : 'disabled';

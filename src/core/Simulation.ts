@@ -1306,19 +1306,11 @@ export class Simulation {
   }
 
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
-    const hasLibrary = [...this.buildings.values()].some(
-      (b) => b.type === 'library' && b.nation === this.playerNation
-    );
-    if (!hasLibrary) return false;
-    if (this.research.current) return false;
+    if (this.canTryResearch(track) !== null) return false;
     const level = this.research[track];
-    if (level >= 5) return false;
-    const costKnowledge = 40 + level * 30;
-    const costWealth = 20 + level * 15;
-    if (this.resources.knowledge < costKnowledge || this.resources.wealth < costWealth)
-      return false;
-    this.resources.knowledge -= costKnowledge;
-    this.resources.wealth -= costWealth;
+    const { knowledge, wealth } = this.getResearchCost(level);
+    this.resources.knowledge -= knowledge;
+    this.resources.wealth -= wealth;
     this.research.current = track;
     this.research.timeRemaining = this.researchTimeFor();
     this.research.progress = 0;

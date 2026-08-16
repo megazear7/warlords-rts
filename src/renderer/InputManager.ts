@@ -270,18 +270,26 @@ export class InputManager {
         case 'KeyS':
           if (!e.ctrlKey) this.game?.saveSlot(1);
           break;
-        case 'F1':
-          if (!sim.tryResearch('science')) this.game?.ui.showToast(sim.canTryResearch('science') ?? 'Cannot research');
+        case 'F1': {
+          const reason1 = sim.canTryResearch('science');
+          if (!sim.tryResearch('science')) this.game?.ui.showToast(reason1 ?? 'Cannot research');
           break;
-        case 'F2':
-          if (!sim.tryResearch('civic')) this.game?.ui.showToast(sim.canTryResearch('civic') ?? 'Cannot research');
+        }
+        case 'F2': {
+          const reason2 = sim.canTryResearch('civic');
+          if (!sim.tryResearch('civic')) this.game?.ui.showToast(reason2 ?? 'Cannot research');
           break;
-        case 'F3':
-          if (!sim.tryResearch('military')) this.game?.ui.showToast(sim.canTryResearch('military') ?? 'Cannot research');
+        }
+        case 'F3': {
+          const reason3 = sim.canTryResearch('military');
+          if (!sim.tryResearch('military')) this.game?.ui.showToast(reason3 ?? 'Cannot research');
           break;
-        case 'F4':
-          if (!sim.tryResearch('commerce')) this.game?.ui.showToast(sim.canTryResearch('commerce') ?? 'Cannot research');
+        }
+        case 'F4': {
+          const reason4 = sim.canTryResearch('commerce');
+          if (!sim.tryResearch('commerce')) this.game?.ui.showToast(reason4 ?? 'Cannot research');
           break;
+        }
       }
     });
   }
