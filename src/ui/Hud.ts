@@ -1,10 +1,12 @@
 import { Simulation } from '../core/Simulation';
+import { NATIONS } from '../data/nations';
 
 export class Hud {
   private root: HTMLElement;
   private resourcesEl: HTMLElement;
   private selectionEl: HTMLElement;
   private researchEl: HTMLElement;
+  private epochEl: HTMLElement;
   private fpsEl: HTMLElement;
 
   constructor() {
@@ -17,17 +19,20 @@ export class Hud {
 
     this.root.innerHTML = `
       <div class="hud-title"><strong>Warlords</strong> <span id="hud-fps"></span></div>
+      <div class="hud-epoch" id="hud-epoch"></div>
       <div class="hud-resources" id="hud-resources"></div>
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-help">
-        Esc Pause · S Quick-save · F/B/L/C build · T train · 1–4 research
+        Esc pause · E advance epoch · W train supply wagon · S quick-save<br/>
+        Units outside your borders take attrition unless supplied by wagons
       </div>
     `;
 
     this.resourcesEl = document.getElementById('hud-resources') as HTMLElement;
     this.selectionEl = document.getElementById('hud-selection') as HTMLElement;
     this.researchEl = document.getElementById('hud-research') as HTMLElement;
+    this.epochEl = document.getElementById('hud-epoch') as HTMLElement;
     this.fpsEl = document.getElementById('hud-fps') as HTMLElement;
   }
 
@@ -37,8 +42,11 @@ export class Hud {
 
   update(sim: Simulation, fps?: number) {
     const r = sim.resources;
-    const playerUnits = sim.getAllUnits().filter((u) => u.nation === 'rome').length;
-    const enemyUnits = sim.getAllUnits().filter((u) => u.nation === 'gaul').length;
+    const nation = NATIONS[sim.playerNation];
+    const playerUnits = sim.getAllUnits().filter((u) => u.nation === sim.playerNation).length;
+    const enemyUnits = sim.getAllUnits().filter((u) => u.nation !== sim.playerNation).length;
+
+    this.epochEl.textContent = `${nation.name} — ${sim.getCurrentEpochName()} (E to advance)`;
 
     this.resourcesEl.innerHTML = `
       <span>🍞 ${Math.floor(r.food)}</span>
@@ -66,9 +74,13 @@ export class Hud {
       let extra = '';
       if (u.gatherTargetId) extra = ' · gathering';
       if (u.attackTargetId) extra = ' · attacking';
+      if (u.underAttrition) extra += ' · ⚠ attrition';
+      if (u.type === 'supply_wagon') extra += ' · supply';
       this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
-      this.selectionEl.textContent = `Selected: ${selected.length} units`;
+      const attr = selected.filter((u) => u.underAttrition).length;
+      this.selectionEl.textContent =
+        `Selected: ${selected.length} units` + (attr ? ` (${attr} under attrition)` : '');
     }
 
     const rs = sim.research;
