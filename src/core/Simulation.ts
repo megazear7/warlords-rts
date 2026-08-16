@@ -82,6 +82,7 @@ export class Simulation {
   aiWealth = 100;
   aiKnowledge = 50;
   aiEpochIndex = 0;
+  aiResearch = { science: 0, civic: 0, military: 0, commerce: 0 };
   // private aiPhase: 'build' | 'train' | 'attack' = 'build';
   aiTimer = 5;
   aiWaveTimer = 45;
@@ -118,6 +119,7 @@ export class Simulation {
     this.aiWealth = 100;
     this.aiKnowledge = 50;
     this.aiEpochIndex = 0;
+    this.aiResearch = { science: 0, civic: 0, military: 0, commerce: 0 };
     // this.aiPhase = 'build';
     this.lastTrainComplete = false;
     this.gameOver = false;
