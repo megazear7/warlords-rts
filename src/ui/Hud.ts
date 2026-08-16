@@ -58,8 +58,9 @@ export class Hud {
     const nation = NATIONS[sim.playerNation];
     const playerUnits = sim.getAllUnits().filter((u) => u.nation === sim.playerNation && u.hp > 0).length;
     const enemyUnits = sim.getAllUnits().filter((u) => u.nation !== sim.playerNation && u.hp > 0).length;
+    const cityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation === sim.playerNation).length;
 
-    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${sim.countPlayerCities?.() ?? 1}/${sim.cityLimit}`;
+    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.cityLimit}`;
 
     this.resourcesEl.innerHTML = `
       <span>🌾 ${Math.floor(r.food)}</span>
