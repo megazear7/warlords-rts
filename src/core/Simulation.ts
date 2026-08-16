@@ -92,7 +92,6 @@ export class Simulation {
 
   private aiTimer = 8;
 
-  /** Full wipe before New Game or load */
   reset() {
     this.units.clear();
     this.buildings.clear();
@@ -107,23 +106,31 @@ export class Simulation {
     this.aiTimer = 8;
   }
 
-  /** Victory = no enemy units or cities. Defeat = no player cities. */
+  /**
+   * Defeat: no player city centers remain.
+   * Victory: all enemy units defeated (empty enemy cities are auto-captured).
+   */
   checkOutcome(): 'victory' | 'defeat' | null {
     let playerCities = 0;
-    let enemyCities = 0;
-    for (const b of this.buildings.values()) {
-      if (b.type !== 'city_center') continue;
-      if (b.nation === 'rome') playerCities++;
-      else enemyCities++;
-    }
-
     let enemyUnits = 0;
+
+    for (const b of this.buildings.values()) {
+      if (b.type === 'city_center' && b.nation === 'rome') playerCities++;
+    }
     for (const u of this.units.values()) {
       if (u.nation !== 'rome' && u.hp > 0) enemyUnits++;
     }
 
     if (playerCities === 0) return 'defeat';
-    if (enemyCities === 0 && enemyUnits === 0) return 'victory';
+
+    // Auto-capture undefended enemy cities
+    if (enemyUnits === 0) {
+      for (const b of this.buildings.values()) {
+        if (b.nation !== 'rome') b.nation = 'rome';
+      }
+      return 'victory';
+    }
+
     return null;
   }
 
@@ -475,19 +482,14 @@ export class Simulation {
     if (citizens.length === 0) return false;
     if (this.resources.timber < costTimber) return false;
     if (this.resources.wealth < costWealth) return false;
-    let ax = 0,
-      az = 0;
+    let ax = 0, az = 0;
     for (const c of citizens) {
       ax += c.position.x;
       az += c.position.z;
     }
     ax /= citizens.length;
     az /= citizens.length;
-    const pos = {
-      x: ax + 5 + Math.random() * 2,
-      y: 0,
-      z: az + 3 + Math.random() * 2,
-    };
+    const pos = { x: ax + 5 + Math.random() * 2, y: 0, z: az + 3 + Math.random() * 2 };
     this.resources.timber -= costTimber;
     this.resources.wealth -= costWealth;
     const hp = type === 'barracks' ? 800 : type === 'library' ? 600 : 400;
@@ -495,15 +497,9 @@ export class Simulation {
     return true;
   }
 
-  tryBuildFarm(): boolean {
-    return this.placeBuildingNearCitizens('farm', 60);
-  }
-  tryBuildBarracks(): boolean {
-    return this.placeBuildingNearCitizens('barracks', 100, 20);
-  }
-  tryBuildLibrary(): boolean {
-    return this.placeBuildingNearCitizens('library', 80, 40);
-  }
+  tryBuildFarm(): boolean { return this.placeBuildingNearCitizens('farm', 60); }
+  tryBuildBarracks(): boolean { return this.placeBuildingNearCitizens('barracks', 100, 20); }
+  tryBuildLibrary(): boolean { return this.placeBuildingNearCitizens('library', 80, 40); }
 
   tryFoundCity(): boolean {
     if (this.countPlayerCities() >= this.cityLimit) return false;
@@ -529,20 +525,16 @@ export class Simulation {
     if (!b || b.type !== 'barracks') return false;
     if (b.productionTimer != null && b.productionTimer > 0) return false;
     if (this.countPlayerUnits() >= this.popCap) return false;
-    const costFood = 60;
-    const costMetal = 20;
-    if (this.resources.food < costFood || this.resources.metal < costMetal) return false;
-    this.resources.food -= costFood;
-    this.resources.metal -= costMetal;
+    if (this.resources.food < 60 || this.resources.metal < 20) return false;
+    this.resources.food -= 60;
+    this.resources.metal -= 20;
     b.productionType = 'legionary';
     b.productionTimer = 12;
     return true;
   }
 
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
-    const hasLibrary = [...this.buildings.values()].some(
-      (b) => b.type === 'library' && b.nation === 'rome'
-    );
+    const hasLibrary = [...this.buildings.values()].some((b) => b.type === 'library' && b.nation === 'rome');
     if (!hasLibrary) return false;
     if (this.research.current) return false;
     const level = this.research[track];
@@ -558,13 +550,7 @@ export class Simulation {
     return true;
   }
 
-  getAllUnits(): Unit[] {
-    return Array.from(this.units.values());
-  }
-  getAllBuildings(): Building[] {
-    return Array.from(this.buildings.values());
-  }
-  getAllResourceNodes(): ResourceNode[] {
-    return Array.from(this.resourceNodes.values());
-  }
+  getAllUnits(): Unit[] { return Array.from(this.units.values()); }
+  getAllBuildings(): Building[] { return Array.from(this.buildings.values()); }
+  getAllResourceNodes(): ResourceNode[] { return Array.from(this.resourceNodes.values()); }
 }
