@@ -29,9 +29,8 @@ export class UnitMeshes {
       if (ring) {
         const mat = ring.material as THREE.MeshBasicMaterial;
         mat.opacity = selectedIds.has(unit.id) ? 0.85 : 0;
-        // Attrition = orange ring tint
         if (unit.underAttrition && selectedIds.has(unit.id)) mat.color.setHex(0xffaa33);
-        else if (selectedIds.has(unit.id)) mat.color.setHex(unit.nation === 'rome' || !unit.nation.includes('gaul') ? 0x44ff88 : 0xff4444);
+        else if (selectedIds.has(unit.id)) mat.color.setHex(0x44ff88);
       }
 
       const hpBar = mesh.userData.hpBar as THREE.Mesh | undefined;
@@ -62,7 +61,6 @@ export class UnitMeshes {
       cart.position.y = 0.55;
       cart.castShadow = true;
       group.add(cart);
-
       for (const x of [-0.55, 0.55]) {
         const wheel = new THREE.Mesh(
           new THREE.CylinderGeometry(0.35, 0.35, 0.15, 10),
@@ -75,22 +73,66 @@ export class UnitMeshes {
         wheel2.position.z = -0.55;
         group.add(wheel2);
       }
+    } else if (unit.type === 'cataphract' || unit.type === 'chariot') {
+      // Mounted / chariot silhouette
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.6, 0.8),
+        new THREE.MeshStandardMaterial({
+          color: unit.type === 'chariot' ? 0xc9a84c : 0x8a7a2a,
+          roughness: 0.7,
+        })
+      );
+      body.position.y = 0.9;
+      body.castShadow = true;
+      group.add(body);
+      const rider = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.25, 0.4, 4, 6),
+        new THREE.MeshStandardMaterial({ color: unit.nation === 'egypt' ? 0x2e8b57 : 0xc9a227 })
+      );
+      rider.position.y = 1.5;
+      group.add(rider);
     } else {
       let bodyColor = 0xc4a35a;
       let scale = 1;
 
-      if (unit.type === 'scout') bodyColor = 0x4a7c9b;
-      if (unit.type === 'citizen') bodyColor = 0xb08d57;
-      if (unit.type === 'legionary') {
-        bodyColor = 0x8b1a1a;
-        scale = 1.15;
+      switch (unit.type) {
+        case 'scout':
+          bodyColor = 0x4a7c9b;
+          break;
+        case 'citizen':
+          bodyColor = 0xb08d57;
+          break;
+        case 'legionary':
+          bodyColor = 0x8b1a1a;
+          scale = 1.15;
+          break;
+        case 'praetorian':
+          bodyColor = 0x5c0a0a;
+          scale = 1.25;
+          break;
+        case 'immortal':
+          bodyColor = 0xc9a227;
+          scale = 1.12;
+          break;
+        case 'spearman':
+          bodyColor = 0x2e8b57;
+          scale = 1.1;
+          break;
+        case 'swordsman':
+        case 'fanatic':
+          bodyColor = 0x3d6b2a;
+          scale = unit.type === 'fanatic' ? 1.05 : 1.1;
+          break;
+        case 'enemy_warrior':
+          bodyColor = 0x3d6b2a;
+          scale = 1.1;
+          break;
+        default:
+          if (unit.nation === 'persia') bodyColor = 0xc9a227;
+          if (unit.nation === 'egypt') bodyColor = 0x2e8b57;
+          if (unit.nation === 'gaul') bodyColor = 0x3d6b2a;
+          if (unit.nation === 'rome') bodyColor = 0xb22222;
       }
-      if (unit.type === 'enemy_warrior' || unit.nation === 'gaul') {
-        bodyColor = 0x3d6b2a;
-        scale = 1.1;
-      }
-      if (unit.nation === 'persia') bodyColor = 0xc9a227;
-      if (unit.nation === 'egypt') bodyColor = 0x2e8b57;
 
       const body = new THREE.Mesh(
         new THREE.CapsuleGeometry(0.35 * scale, 0.7 * scale, 4, 8),
@@ -108,13 +150,22 @@ export class UnitMeshes {
       head.castShadow = true;
       group.add(head);
 
-      if (unit.type === 'legionary') {
+      if (unit.type === 'legionary' || unit.type === 'praetorian') {
         const shield = new THREE.Mesh(
           new THREE.BoxGeometry(0.15, 0.9, 0.6),
           new THREE.MeshStandardMaterial({ color: 0xc4a035, metalness: 0.3, roughness: 0.5 })
         );
         shield.position.set(-0.5, 0.9, 0);
         group.add(shield);
+      }
+      if (unit.type === 'spearman') {
+        const spear = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.04, 2.2, 6),
+          new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
+        );
+        spear.position.set(0.45, 1.2, 0);
+        spear.rotation.z = 0.3;
+        group.add(spear);
       }
     }
 
@@ -136,7 +187,10 @@ export class UnitMeshes {
       new THREE.PlaneGeometry(1.0, 0.1),
       new THREE.MeshBasicMaterial({ color: 0x44ff66, depthWrite: false })
     );
-    hpBar.position.y = unit.type === 'supply_wagon' ? 1.4 : 2.1;
+    hpBar.position.y =
+      unit.type === 'supply_wagon' || unit.type === 'cataphract' || unit.type === 'chariot'
+        ? 1.6
+        : 2.1;
     group.add(hpBar);
 
     group.userData.unitId = unit.id;
