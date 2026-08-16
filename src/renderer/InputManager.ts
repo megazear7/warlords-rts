@@ -5,6 +5,8 @@ import { EntityId } from '../core/types';
 import type { Game } from '../Game';
 import { audio } from '../audio/AudioManager';
 
+const EDGE_MARGIN = 28;
+
 export class InputManager {
   private renderer: Renderer;
   private simulation: Simulation | null = null;
@@ -20,12 +22,15 @@ export class InputManager {
   private downY = 0;
   private lastX = 0;
   private lastY = 0;
+  private mouseX = 0;
+  private mouseY = 0;
   private lastClickTime = 0;
   private lastClickUnitType: string | null = null;
 
   private readonly DRAG_THRESHOLD = 5;
   private panMul = 1;
   private zoomMul = 1;
+  private edgeScroll = true;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -84,6 +89,8 @@ export class InputManager {
     });
 
     window.addEventListener('mousemove', (e) => {
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
       if (!this.isGameplay()) return;
       const dx = e.clientX - this.lastX;
       const dy = e.clientY - this.lastY;
@@ -154,6 +161,11 @@ export class InputManager {
         case 'KeyL':
           if (sim.tryBuildLibrary()) audio.play('build_place');
           break;
+        case 'KeyV':
+          if (!sim.tryTrainCitizen()) {
+            this.game?.ui.showToast('Select city center · costs 50 food');
+          }
+          break;
         case 'KeyT':
           sim.tryTrainLegionary();
           break;
@@ -208,6 +220,30 @@ export class InputManager {
 
   setZoomSpeedMultiplier(m: number) {
     this.zoomMul = m;
+  }
+
+  setEdgeScroll(enabled: boolean) {
+    this.edgeScroll = enabled;
+  }
+
+  /** Call each frame while playing */
+  updateEdgeScroll(dt: number) {
+    if (!this.edgeScroll || !this.isGameplay()) return;
+    if (this.isLeftDown || this.isRightDown || this.isBoxSelecting) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    let dx = 0;
+    let dy = 0;
+    if (this.mouseX < EDGE_MARGIN) dx = -1;
+    else if (this.mouseX > w - EDGE_MARGIN) dx = 1;
+    if (this.mouseY < EDGE_MARGIN) dy = -1;
+    else if (this.mouseY > h - EDGE_MARGIN) dy = 1;
+    if (dx === 0 && dy === 0) return;
+
+    // Scale like mouse-pan: ~frame equivalent of 400px/s at base
+    const pixels = 420 * dt * this.panMul;
+    this.pan(dx * pixels, dy * pixels);
   }
 
   private isGameplay(): boolean {
@@ -276,7 +312,19 @@ export class InputManager {
   }
 
   private handleRightClick(clientX: number, clientY: number) {
-    if (!this.simulation || this.simulation.selected.size === 0) return;
+    if (!this.simulation) return;
+
+    // Rally point: building selected, no units selected
+    if (this.simulation.selected.size === 0 && this.simulation.selectedBuildingId) {
+      const point = this.raycastGround(clientX, clientY);
+      if (point && this.simulation.setRallyPoint({ x: point.x, y: 0, z: point.z })) {
+        audio.play('ui_confirm');
+        this.game?.ui.showToast('Rally point set');
+        return;
+      }
+    }
+
+    if (this.simulation.selected.size === 0) return;
 
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
