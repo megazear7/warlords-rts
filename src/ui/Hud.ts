@@ -1,6 +1,7 @@
 import { Simulation } from '../core/Simulation';
 import { NATIONS } from '../data/nations';
 import { getTrainableForNation } from '../data/units';
+import { getExchangeRates } from '../data/market';
 
 export class Hud {
   private root: HTMLElement;
@@ -33,10 +34,10 @@ export class Hud {
       <div class="hud-market" id="hud-market" style="display:none; margin-top:6px; padding:6px; background:rgba(0,0,0,0.55); border-radius:4px;">
         <div style="font-weight:600; margin-bottom:4px;">Market</div>
         <div id="hud-market-rates"></div>
-        <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal</div>
+        <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal · O sell timber · P buy timber</div>
       </div>
       <div class="hud-help">
-        A attack-move · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I trade · V citizen · G general<br/>
+        A attack-move · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I/O/P trade · V citizen · G general<br/>
         T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
       </div>
     `;
@@ -110,10 +111,12 @@ export class Hud {
       this.selectionEl.textContent = `Building: ${building.type} (${hp})${extra}`;
       if (building.type === 'market') {
         this.marketEl.style.display = 'block';
-        const com = sim.research.commerce;
-        const sellRate = 0.35 + com * 0.05;
-        const buyCost = Math.max(1.2, 2.0 - com * 0.12);
-        this.marketRatesEl.innerHTML = `Sell food → ${sellRate.toFixed(2)} wealth each<br/>Buy metal ← ${buyCost.toFixed(2)} wealth each`;
+        const rates = getExchangeRates(sim.research.commerce);
+        this.marketRatesEl.innerHTML =
+          `Sell 50 food → ${(50 * rates.sellFood).toFixed(1)} wealth (${rates.sellFood.toFixed(2)}/ea)<br/>` +
+          `Sell 50 timber → ${(50 * rates.sellTimber).toFixed(1)} wealth (${rates.sellTimber.toFixed(2)}/ea)<br/>` +
+          `Buy 20 metal ← ${(20 * rates.buyMetal).toFixed(1)} wealth (${rates.buyMetal.toFixed(2)}/ea)<br/>` +
+          `Buy 50 timber ← ${(50 * rates.buyTimber).toFixed(1)} wealth (${rates.buyTimber.toFixed(2)}/ea)`;
       } else {
         this.marketEl.style.display = 'none';
       }

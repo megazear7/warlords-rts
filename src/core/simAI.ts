@@ -1,6 +1,7 @@
 import type { Simulation } from './Simulation';
 import type { Unit } from './simTypes';
 import { distanceXZ } from './math';
+import { executeTrade } from '../data/market';
 
 /**
  * AI opponent logic — extracted so Simulation.ts stays smaller / pushable.
@@ -16,6 +17,9 @@ export class SimulationAI {
 
     // Attempt epoch advance when affordable
     s.tryAIAdvanceEpoch();
+
+    // AI market trading: if AI has a market, try to fix resource shortages
+    this.runMarketTrades(nation);
 
     // 1) Farms
     if (s.countBuildingsOf('farm', nation) < 2 && s.aiTimber >= 60) {
@@ -184,6 +188,50 @@ export class SimulationAI {
     );
     for (const u of fighters) {
       u.attackBuildingId = pc.id;
+    }
+  }
+
+  /**
+   * Basic AI market trading: if AI owns a market and is critically low on one
+   * resource while holding surplus in another, perform an exchange.
+   */
+  private runMarketTrades(nation: string): void {
+    const s = this.sim;
+    const hasMarket = [...s.buildings.values()].some(
+      (b) => b.type === 'market' && b.nation === nation
+    );
+    if (!hasMarket) return;
+
+    // Proxy AI resources as a TradeResources object (mutates AI resource fields)
+    const aiRes = {
+      get food() { return s.aiFood; },
+      set food(v: number) { s.aiFood = v; },
+      get timber() { return s.aiTimber; },
+      set timber(v: number) { s.aiTimber = v; },
+      get metal() { return s.aiMetal; },
+      set metal(v: number) { s.aiMetal = v; },
+      get wealth() { return s.aiWealth; },
+      set wealth(v: number) { s.aiWealth = v; },
+    };
+
+    // Sell surplus food if very wealthy in food
+    if (s.aiFood > 300 && s.aiWealth < 150) {
+      executeTrade(aiRes, 'food', 'wealth', 100, s.aiKnowledge, true);
+      return;
+    }
+    // Sell surplus timber if very wealthy in timber
+    if (s.aiTimber > 300 && s.aiWealth < 150) {
+      executeTrade(aiRes, 'timber', 'wealth', 100, s.aiKnowledge, true);
+      return;
+    }
+    // Buy food if critically low
+    if (s.aiFood < 60 && s.aiWealth > 80) {
+      executeTrade(aiRes, 'wealth', 'food', 50, s.aiKnowledge, true);
+      return;
+    }
+    // Buy metal if critically low
+    if (s.aiMetal < 30 && s.aiWealth > 60) {
+      executeTrade(aiRes, 'wealth', 'metal', 20, s.aiKnowledge, true);
     }
   }
 }

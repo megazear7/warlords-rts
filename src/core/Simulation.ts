@@ -15,6 +15,9 @@ import type {
   ResearchState,
 } from './simTypes';
 import { SimulationAI } from './simAI';
+import { executeTrade as _executeTrade, canTrade as _canTrade, type TradeResource } from '../data/market';
+export { getExchangeRates } from '../data/market';
+export type { TradeResource, ExchangeRates, TradeResult } from '../data/market';
 
 export type { Unit, Building, ResourceNode, Resources, ResearchState } from './simTypes';
 
@@ -986,29 +989,38 @@ export class Simulation {
     return this.placeBuildingNearCitizens('wall', 40, 20);
   }
 
-  /** Commerce trade: sell food for wealth (better rate with Commerce research) */
-  trySellFood(amount = 50): boolean {
-    const hasMarket = [...this.buildings.values()].some(
+  /** Returns true if the player owns at least one market building. */
+  hasPlayerMarket(): boolean {
+    return [...this.buildings.values()].some(
       (b) => b.type === 'market' && b.nation === this.playerNation
     );
-    if (!hasMarket) return false;
-    if (this.resources.food < amount) return false;
-    const rate = 0.4 + this.research.commerce * 0.12; // wealth per food
-    this.resources.food -= amount;
-    this.resources.wealth += amount * rate;
-    return true;
+  }
+
+  /**
+   * Execute a market trade for the player.
+   * `from`/`to` are resource keys or 'wealth'; `amount` is units of the `from` resource.
+   * Returns true and mutates resources on success, false on failure.
+   */
+  executeTrade(from: TradeResource | 'wealth', to: TradeResource | 'wealth', amount: number): boolean {
+    const r = this.resources as unknown as import('../data/market').TradeResources;
+    const result = _executeTrade(r, from, to, amount, this.research.commerce, this.hasPlayerMarket());
+    return result.ok;
+  }
+
+  /** Returns the reason the last checked trade would fail, or undefined if valid. */
+  checkTrade(from: TradeResource | 'wealth', to: TradeResource | 'wealth', amount: number): string | undefined {
+    const r = this.resources as unknown as import('../data/market').TradeResources;
+    const result = _canTrade(r, from, to, amount, this.research.commerce, this.hasPlayerMarket());
+    return result.ok ? undefined : result.reason;
+  }
+
+  /** Commerce trade: sell food for wealth (better rate with Commerce research) */
+  trySellFood(amount = 50): boolean {
+    return this.executeTrade('food', 'wealth', amount);
   }
 
   tryBuyMetal(amount = 20): boolean {
-    const hasMarket = [...this.buildings.values()].some(
-      (b) => b.type === 'market' && b.nation === this.playerNation
-    );
-    if (!hasMarket) return false;
-    const cost = amount * (2.2 - this.research.commerce * 0.2);
-    if (this.resources.wealth < cost) return false;
-    this.resources.wealth -= cost;
-    this.resources.metal += amount;
-    return true;
+    return this.executeTrade('wealth', 'metal', amount);
   }
 
   tryFoundCity(): boolean {
