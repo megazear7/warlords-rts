@@ -5,11 +5,12 @@ import { EntityId } from '../core/types';
 
 /**
  * RTS-style input:
- * - Left click          → select unit (or clear selection)
- * - Left drag           → pan camera (if movement > threshold)
- * - Right click         → move selected units to ground point
- * - Right drag          → orbit camera
+ * - Left click          → select unit
+ * - Left drag (empty)   → box select OR pan (Shift held = pan)
+ * - Right click         → move / gather
+ * - Right drag          → orbit
  * - Wheel               → zoom
+ * - F key               → build Farm (requires selected citizens + timber)
  */
 export class InputManager {
   private renderer: Renderer;
@@ -19,21 +20,36 @@ export class InputManager {
   private isRightDown = false;
   private isPanning = false;
   private isOrbiting = false;
+  private isBoxSelecting = false;
 
   private downX = 0;
   private downY = 0;
   private lastX = 0;
   private lastY = 0;
 
-  private readonly DRAG_THRESHOLD = 5; // pixels
+  private readonly DRAG_THRESHOLD = 5;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+  private selectionBoxEl: HTMLDivElement;
+
   constructor(renderer: Renderer) {
     this.renderer = renderer;
     const el = renderer.domElement;
+
+    // Visual selection rectangle
+    this.selectionBoxEl = document.createElement('div');
+    this.selectionBoxEl.style.cssText = `
+      position: absolute;
+      border: 1px solid #44ff88;
+      background: rgba(68, 255, 136, 0.12);
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+    `;
+    document.getElementById('app')?.appendChild(this.selectionBoxEl);
 
     el.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -44,6 +60,7 @@ export class InputManager {
       if (e.button === 0) {
         this.isLeftDown = true;
         this.isPanning = false;
+        this.isBoxSelecting = false;
       }
       if (e.button === 2 || e.button === 1) {
         this.isRightDown = true;
@@ -57,12 +74,16 @@ export class InputManager {
         const dy = e.clientY - this.downY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < this.DRAG_THRESHOLD) {
-          // Treat as click → selection
+        if (this.isBoxSelecting) {
+          this.finishBoxSelect(e.clientX, e.clientY, e.shiftKey);
+        } else if (dist < this.DRAG_THRESHOLD) {
           this.handleSelectClick(e.clientX, e.clientY, e.shiftKey);
         }
+
         this.isLeftDown = false;
         this.isPanning = false;
+        this.isBoxSelecting = false;
+        this.selectionBoxEl.style.display = 'none';
       }
 
       if ((e.button === 2 || e.button === 1) && this.isRightDown) {
@@ -71,8 +92,7 @@ export class InputManager {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < this.DRAG_THRESHOLD) {
-          // Treat as right-click → move order
-          this.handleMoveOrder(e.clientX, e.clientY);
+          this.handleRightClick(e.clientX, e.clientY);
         }
         this.isRightDown = false;
         this.isOrbiting = false;
@@ -88,10 +108,22 @@ export class InputManager {
       if (this.isLeftDown) {
         const totalDx = e.clientX - this.downX;
         const totalDy = e.clientY - this.downY;
-        if (!this.isPanning && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > this.DRAG_THRESHOLD) {
-          this.isPanning = true;
+        const totalDist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
+
+        if (totalDist > this.DRAG_THRESHOLD) {
+          // Shift = force pan, otherwise box select
+          if (e.shiftKey) {
+            this.isPanning = true;
+            this.isBoxSelecting = false;
+            this.selectionBoxEl.style.display = 'none';
+          } else if (!this.isPanning) {
+            this.isBoxSelecting = true;
+            this.updateSelectionBox(e.clientX, e.clientY);
+          }
         }
+
         if (this.isPanning) this.pan(dx, dy);
+        if (this.isBoxSelecting) this.updateSelectionBox(e.clientX, e.clientY);
       }
 
       if (this.isRightDown) {
@@ -112,14 +144,67 @@ export class InputManager {
       },
       { passive: false }
     );
+
+    // Keyboard: F = build farm
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyF' && this.simulation) {
+        const ok = this.simulation.tryBuildFarm();
+        if (!ok) {
+          // Could show a toast later
+          console.log('Cannot build farm (need selected citizens + 60 timber)');
+        }
+      }
+    });
   }
 
-  /** Called by Game after simulation is created */
   setSimulation(sim: Simulation) {
     this.simulation = sim;
   }
 
-  // ── Selection ──────────────────────────────────────────────
+  // ── Selection box ──────────────────────────────────────────
+
+  private updateSelectionBox(clientX: number, clientY: number) {
+    const x = Math.min(this.downX, clientX);
+    const y = Math.min(this.downY, clientY);
+    const w = Math.abs(clientX - this.downX);
+    const h = Math.abs(clientY - this.downY);
+
+    this.selectionBoxEl.style.left = `${x}px`;
+    this.selectionBoxEl.style.top = `${y}px`;
+    this.selectionBoxEl.style.width = `${w}px`;
+    this.selectionBoxEl.style.height = `${h}px`;
+    this.selectionBoxEl.style.display = 'block';
+  }
+
+  private finishBoxSelect(clientX: number, clientY: number, additive: boolean) {
+    if (!this.simulation) return;
+
+    const x1 = Math.min(this.downX, clientX);
+    const y1 = Math.min(this.downY, clientY);
+    const x2 = Math.max(this.downX, clientX);
+    const y2 = Math.max(this.downY, clientY);
+
+    const selected: EntityId[] = [];
+    const cam = this.renderer.camera;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+
+    for (const unit of this.simulation.getAllUnits()) {
+      // Project unit position to screen
+      const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
+      pos.project(cam);
+
+      const sx = ((pos.x + 1) / 2) * rect.width + rect.left;
+      const sy = ((-pos.y + 1) / 2) * rect.height + rect.top;
+
+      if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
+        selected.push(unit.id);
+      }
+    }
+
+    this.simulation.selectUnits(selected, additive);
+  }
+
+  // ── Click selection ────────────────────────────────────────
 
   private handleSelectClick(clientX: number, clientY: number, additive: boolean) {
     if (!this.simulation) return;
@@ -136,7 +221,6 @@ export class InputManager {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
 
-    // Collect unit meshes from the scene
     const unitObjects: THREE.Object3D[] = [];
     this.renderer.scene.traverse((obj) => {
       if (obj.userData?.unitId) unitObjects.push(obj);
@@ -144,7 +228,6 @@ export class InputManager {
 
     const hits = this.raycaster.intersectObjects(unitObjects, true);
     if (hits.length > 0) {
-      // Walk up to find the object that carries unitId
       let obj: THREE.Object3D | null = hits[0].object;
       while (obj) {
         if (obj.userData?.unitId) return obj.userData.unitId as EntityId;
@@ -154,16 +237,43 @@ export class InputManager {
     return null;
   }
 
-  // ── Move Order ─────────────────────────────────────────────
+  // ── Right-click: move or gather ────────────────────────────
 
-  private handleMoveOrder(clientX: number, clientY: number) {
+  private handleRightClick(clientX: number, clientY: number) {
     if (!this.simulation) return;
     if (this.simulation.selected.size === 0) return;
+
+    // Prefer resource node if clicked
+    const nodeId = this.raycastResourceNode(clientX, clientY);
+    if (nodeId) {
+      this.simulation.orderGatherSelected(nodeId);
+      return;
+    }
 
     const point = this.raycastGround(clientX, clientY);
     if (point) {
       this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
     }
+  }
+
+  private raycastResourceNode(clientX: number, clientY: number): EntityId | null {
+    this.updateMouseNDC(clientX, clientY);
+    this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
+
+    const objs: THREE.Object3D[] = [];
+    this.renderer.scene.traverse((obj) => {
+      if (obj.userData?.resourceNodeId) objs.push(obj);
+    });
+
+    const hits = this.raycaster.intersectObjects(objs, true);
+    if (hits.length > 0) {
+      let obj: THREE.Object3D | null = hits[0].object;
+      while (obj) {
+        if (obj.userData?.resourceNodeId) return obj.userData.resourceNodeId as EntityId;
+        obj = obj.parent;
+      }
+    }
+    return null;
   }
 
   private raycastGround(clientX: number, clientY: number): THREE.Vector3 | null {
