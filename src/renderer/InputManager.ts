@@ -169,11 +169,11 @@ export class InputManager {
           break;
         case 'KeyY':
           if (sim.tryBuildTower()) audio.play('build_place');
-          else this.game?.ui.showToast('Select citizens · tower costs 80 timber, 30 wealth');
+          else this.game?.ui.showToast('Need Military research 1+ · select citizens · 80 timber, 30 wealth');
           break;
         case 'KeyM':
           if (sim.tryBuildMarket()) audio.play('build_place');
-          else this.game?.ui.showToast('Select citizens · market costs 70 timber, 25 wealth');
+          else this.game?.ui.showToast('Need Commerce research 1+ · select citizens · 70 timber, 25 wealth');
           break;
         case 'KeyU':
           if (sim.trySellFood(50)) this.game?.ui.showToast('Sold 50 food for wealth');
