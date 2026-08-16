@@ -1,8 +1,9 @@
 # Warlords RTS
 
-Modern browser-based 3D RTS inspired by Rise of Nations.  
+Modern browser-based 3D RTS inspired by Rise of Nations.
+
 **Nations:** Rome · Persia · Egypt · Gauls  
-**Key design:** Nation-unique epochs (no shared Ages) · four research tracks · capture-only cities · attrition + supply · fog of war
+**Design pillars:** Nation-unique epochs (no shared Ages) · four permanent research tracks (Science / Civic / Military / Commerce) · capture-only cities · attrition + supply wagons · fog of war · generals with auras
 
 ## Quick start
 
@@ -13,35 +14,42 @@ npm install
 npm run dev
 ```
 
-> **Note (2026-08-16):** Full `Simulation.ts` (~42 KB, includes formation offsets) is maintained in the project artifacts.  
-> If restore reports an incomplete payload, copy the authoritative file into `src/core/Simulation.ts`.  
-> **InputManager**, Renderer, Hud, BuildingMeshes, FogMeshes are fully on main.
+Open the URL Vite prints (usually http://localhost:5173). The `predev` hook restores `Simulation.ts` automatically if needed.
 
 ## Controls (highlights)
 
 | Key | Action |
 |-----|--------|
-| **A** | Attack-move (then right-click) |
-| **H** | Wall (requires Military 2) |
-| **Y** | Watchtower (Military 1) |
-| **M** | Market (Commerce 1) |
+| **A** | Attack-move (then right-click destination) |
+| **H** | Build wall (requires Military 2) |
+| **Y** | Build watchtower (Military 1) |
+| **M** | Build market (Commerce 1) |
 | **G** | Train General |
 | **V** | Train citizen |
-| **U** / **I** | Market sell food / buy metal |
-| **F1–F4** | Research tracks |
-| **E** | Advance epoch |
+| **U** / **I** | Market: sell food / buy metal |
+| **F1–F4** | Research Science / Civic / Military / Commerce |
+| **E** | Advance nation epoch |
 | **Ctrl+0-9** | Control groups |
-| Box select · edge-scroll · rally points | |
+| Box select · edge-scroll · rally points · minimap click | |
 
-## Architecture
+## Current feature set (clean main)
 
-- Fixed-timestep Simulation (20 Hz) separated from Three.js Renderer
-- Science / Civic / Military / Commerce research
-- Attrition outside territory unless supply wagons connect to a city
-- Generals with auras · fog of war (explored + current vision)
+- Fixed-timestep Simulation (20 Hz) + Three.js Renderer
+- Procedural terrain, placeholder unit/building meshes, fog-of-war plane
+- Cities (capture only), farms, towers, markets, walls
+- Four research tracks with gates (tower / market / wall)
+- Nation epochs + bonuses
+- Attrition outside friendly territory unless supply linked
+- Generals + aura radius
+- AI opponent (economy → train → wave attacks)
+- Attack-move, unit separation, control groups
+- Save / load / main menu / settings / profile
+- Placeholder Web Audio (synth + SoundCatalog ready for OGG)
 
-## Design docs
+## Architecture notes
 
-→ [Warlords Notion Hub](https://app.notion.com/p/Warlords-3be290435c2f809e8fefee45284db1fa)
+- `src/core/Simulation.ts` – authoritative game state & logic (~42 KB)
+- Restore fallback: `scripts/restore-simulation.cjs` + `.gz.b64.part*` files
+- Design & research live in Notion: [Warlords Hub](https://app.notion.com/p/Warlords-3be290435c2f809e8fefee45284db1fa)
 
 Repo: https://github.com/megazear7/warlords-rts

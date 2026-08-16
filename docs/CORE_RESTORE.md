@@ -1,17 +1,34 @@
-# Core file restore note
+# Core file restore
 
-The authoritative full implementations of:
+`src/core/Simulation.ts` is large (~42 KB). The repository keeps:
 
-- `src/core/Simulation.ts` (~40 KB — attack-move, towers, market, AI, attrition, siege, epochs, vision, generals/auras, explored fog)
-- `src/renderer/InputManager.ts` (~15 KB — all hotkeys including G for General, A for attack-move, etc.)
+1. The full `src/core/Simulation.ts` on `main` (preferred).
+2. A gzip+base64 payload split into `Simulation.ts.gz.b64.part1` … `partN` as a recovery path.
+3. `scripts/restore-simulation.cjs` which reconstructs the file if it is missing or smaller than 10 KB.
 
-are maintained in the Grok project artifacts and the local working tree used during iterative development.
+`npm run predev` / `prebuild` automatically runs the restore script.
 
-GitHub main currently has:
-- Full `src/data/units.ts` (including General)
-- Full `src/renderer/UnitMeshes.ts` (General mesh + aura tint)
-- Full `src/ui/Hud.ts` (market panel + G help + aura status)
-- Full `src/ui/Minimap.ts` (explored + vision filters)
-- Full `src/renderer/Renderer.ts` (vision filter for enemy units)
+To regenerate the payload after editing Simulation.ts:
 
-If Simulation/InputManager appear as short stubs on main, replace them from the project artifacts copies or re-run the restore step from the development session.
+```bash
+# from repo root (Python 3)
+python3 -c '
+import gzip, base64, io, os
+with open("src/core/Simulation.ts", "rb") as f: data = f.read()
+buf = io.BytesIO()
+with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=9) as gz: gz.write(data)
+b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+part_size = 1500
+parts = [b64[i:i+part_size] for i in range(0, len(b64), part_size)]
+for i in range(1, 20):
+    p = f"src/core/Simulation.ts.gz.b64.part{i}"
+    if os.path.exists(p): os.remove(p)
+for i, p in enumerate(parts, 1):
+    open(f"src/core/Simulation.ts.gz.b64.part{i}", "w").write(p)
+open("src/core/Simulation.ts.gz.b64", "w").write(b64)
+print(len(parts), "parts written")
+'
+node scripts/restore-simulation.cjs   # optional verification (with file temporarily removed)
+```
+
+Authoritative copies also live in the Grok project artifacts folder.
