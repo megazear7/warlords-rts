@@ -34,8 +34,8 @@ export class Hud {
         <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal</div>
       </div>
       <div class="hud-help">
-        A attack-move · Y tower · M market · U sell food · I buy metal · V citizen<br/>
-        T infantry · R elite · edge-scroll · F1–F4 research · E epoch · Ctrl+0-9 groups
+        A attack-move · Y tower · M market · U/I trade · V citizen · G general<br/>
+        T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
       </div>
     `;
 
@@ -98,7 +98,6 @@ export class Hud {
       this.marketEl.style.display = 'none';
       this.selectionEl.textContent = 'No selection';
     } else if (selected.length === 1) {
-      this.marketEl.style.display = 'none';
       const u = selected[0];
       let extra = '';
       if (u.gatherTargetId) extra = ' · gathering';
@@ -106,9 +105,10 @@ export class Hud {
       if (u.attackBuildingId) extra = ' · sieging';
       if (u.attackMove) extra += ' · attack-move';
       if (u.underAttrition) extra += ' · ⚠ attrition';
+      if ((u as any).inAura) extra += ' · ⚔ aura';
+      if (u.type === 'general') extra += ' · GENERAL (aura radius)';
       this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
-      this.marketEl.style.display = 'none';
       const attr = selected.filter((u) => u.underAttrition).length;
       this.selectionEl.textContent =
         `Selected: ${selected.length} units` + (attr ? ` (${attr} under attrition)` : '');

@@ -65,6 +65,7 @@ export class Minimap {
     // Resources
     for (const n of sim.getAllResourceNodes()) {
       if (n.amount <= 0) continue;
+      if (!sim.isExplored(n.position)) continue;
       const { px, py } = toXY(n.position.x, n.position.z);
       ctx.fillStyle =
         n.type === 'food' ? '#88cc44' : n.type === 'timber' ? '#aa7744' : '#aaaaaa';
@@ -81,16 +82,16 @@ export class Minimap {
       ctx.fillRect(px - s / 2, py - s / 2, s, s);
     }
 
-    // Units (fog of war: hide enemy outside vision)
+    // Units
     for (const u of sim.getAllUnits()) {
       if (u.nation !== sim.playerNation && !sim.isVisibleToPlayer(u.position)) continue;
       if (u.hp <= 0) continue;
       const { px, py } = toXY(u.position.x, u.position.z);
-      const nationId = u.nation as NationId;
-      const color = NATIONS[nationId]?.color ?? 0x888888;
-      ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+      const isPlayer = u.nation === sim.playerNation;
+      ctx.fillStyle = isPlayer ? '#44ff88' : '#ff5555';
+      if (sim.selected.has(u.id)) ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(px, py, u.type === 'scout' ? 2.5 : 2, 0, Math.PI * 2);
+      ctx.arc(px, py, isPlayer ? 2.2 : 2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
