@@ -56,7 +56,16 @@ export class SimulationAI {
     );
     if (barracks && (barracks.productionTimer == null || barracks.productionTimer <= 0)) {
       const army = s.countUnitsOf(nation);
-      if (army < 18 && s.aiFood >= 55) {
+      const generalCount = [...s.units.values()].filter(
+        (u) => u.nation === nation && u.type === 'general' && u.hp > 0
+      ).length;
+      // Train a general first when army is large enough (max 1 for AI)
+      if (generalCount < 1 && army >= 6 && s.aiFood >= 120 && s.aiMetal >= 80) {
+        s.aiFood -= 120;
+        s.aiMetal -= 80;
+        barracks.productionType = 'general';
+        barracks.productionTimer = 20;
+      } else if (army < 18 && s.aiFood >= 55) {
         s.aiFood -= 55;
         barracks.productionType = 'enemy_warrior';
         barracks.productionTimer = 11;
@@ -67,6 +76,25 @@ export class SimulationAI {
             y: 0,
             z: pc.position.z + (Math.random() - 0.5) * 12,
           };
+        }
+      }
+    }
+
+    // 3b) Keep general near army center
+    const aiGeneral = [...s.units.values()].find(
+      (u) => u.nation === nation && u.type === 'general' && u.hp > 0
+    );
+    if (aiGeneral) {
+      const fighters = [...s.units.values()].filter(
+        (u) => u.nation === nation && u.hp > 0 && u.type !== 'general' && u.type !== 'supply_wagon'
+      );
+      if (fighters.length > 0) {
+        const cx = fighters.reduce((sum, u) => sum + u.position.x, 0) / fighters.length;
+        const cz = fighters.reduce((sum, u) => sum + u.position.z, 0) / fighters.length;
+        const dx = cx - aiGeneral.position.x;
+        const dz = cz - aiGeneral.position.z;
+        if (dx * dx + dz * dz > 64) {
+          aiGeneral.target = { x: cx, y: 0, z: cz };
         }
       }
     }
