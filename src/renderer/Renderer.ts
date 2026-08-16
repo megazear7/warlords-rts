@@ -13,7 +13,6 @@ export class Renderer {
   private unitMeshes: UnitMeshes;
   private buildingMeshes: BuildingMeshes;
   private resourceMeshes: ResourceMeshes;
-  private terrain: THREE.Mesh;
 
   cameraTarget = new THREE.Vector3(0, 0, 0);
   cameraDistance = 55;
@@ -57,8 +56,7 @@ export class Renderer {
     sun.shadow.camera.bottom = -60;
     this.scene.add(sun);
 
-    this.terrain = createTerrain(120);
-    this.scene.add(this.terrain);
+    this.scene.add(createTerrain(120));
 
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
@@ -92,7 +90,7 @@ export class Renderer {
     this.updateCamera();
 
     this.unitMeshes.sync(sim.getAllUnits(), sim.selected);
-    this.buildingMeshes.sync(sim.getAllBuildings());
+    this.buildingMeshes.sync(sim.getAllBuildings(), sim.selectedBuildingId);
     this.resourceMeshes.sync(sim.getAllResourceNodes());
 
     this.renderer.render(this.scene, this.camera);
