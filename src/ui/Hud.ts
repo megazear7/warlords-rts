@@ -40,7 +40,7 @@ export class Hud {
       </div>
       <div class="hud-help">
         A attack-move · C found city (Civ) · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I/O/P trade · V citizen · G general<br/>
-        T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
+        T infantry · R elite · Q scout · W wagon · <strong>Tab research panel</strong> · F1–F4 quick-research · E epoch · Ctrl+0-9
       </div>
     `;
 

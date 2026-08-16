@@ -4,6 +4,7 @@ import { InputManager } from './renderer/InputManager';
 import { Hud } from './ui/Hud';
 import { UIManager } from './ui/UIManager';
 import { Minimap } from './ui/Minimap';
+import { ResearchPanel } from './ui/ResearchPanel';
 import { SaveSystem } from './core/SaveSystem';
 import { ProfileStore } from './core/Profile';
 import { GameSettings } from './core/Settings';
@@ -19,6 +20,7 @@ export class Game {
   readonly hud: Hud;
   readonly ui: UIManager;
   readonly minimap: Minimap;
+  readonly researchPanel: ResearchPanel;
   readonly audio = audio;
 
   private running = false;
@@ -47,6 +49,16 @@ export class Game {
     this.hud.setVisible(false);
     this.minimap = new Minimap();
     this.minimap.setVisible(false);
+    this.researchPanel = new ResearchPanel();
+    this.researchPanel.setOnResearch((track) => {
+      const ok = this.simulation.tryResearch(track);
+      if (ok) {
+        this.ui.showToast(`Researching ${track}…`);
+      } else {
+        const reason = this.simulation.canTryResearch(track);
+        this.ui.showToast(reason ?? 'Cannot research now');
+      }
+    });
 
     this.ui = new UIManager({
       onNewGame: (nation) => this.newGame(nation),
@@ -136,6 +148,7 @@ export class Game {
     this.ui.show('pause');
     this.hud.setVisible(false);
     this.minimap.setVisible(false);
+    this.researchPanel.hide();
     audio.setMusicDucked(true);
     audio.play('ui_click');
   }
@@ -154,6 +167,7 @@ export class Game {
     this.mode = 'menu';
     this.hud.setVisible(false);
     this.minimap.setVisible(false);
+    this.researchPanel.hide();
     audio.setMusicDucked(false);
     audio.playMusic('music_menu');
     audio.play('ui_click');
@@ -277,6 +291,7 @@ export class Game {
     if (this.mode === 'playing') {
       this.hud.update(this.simulation, this.ui.getSettings().showFPS ? this.fps : undefined);
       this.minimap.update(this.simulation);
+      this.researchPanel.update(this.simulation);
     }
 
     requestAnimationFrame(this.loop);

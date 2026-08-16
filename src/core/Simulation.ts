@@ -1283,6 +1283,28 @@ export class Simulation {
     return this.tryTrainUnit('general');
   }
 
+  /** Returns the cost to research the next level of a track. */
+  getResearchCost(level: number): { knowledge: number; wealth: number } {
+    return { knowledge: 40 + level * 30, wealth: 20 + level * 15 };
+  }
+
+  /**
+   * Returns null if research can proceed, or a human-readable reason why it cannot.
+   */
+  canTryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): string | null {
+    const hasLibrary = [...this.buildings.values()].some(
+      (b) => b.type === 'library' && b.nation === this.playerNation
+    );
+    if (!hasLibrary) return 'No library built';
+    if (this.research.current) return `Already researching ${this.research.current}`;
+    const level = this.research[track];
+    if (level >= 5) return 'Max level reached';
+    const { knowledge, wealth } = this.getResearchCost(level);
+    if (this.resources.knowledge < knowledge) return `Need 📚 ${knowledge} (have ${Math.floor(this.resources.knowledge)})`;
+    if (this.resources.wealth < wealth) return `Need 💰 ${wealth} (have ${Math.floor(this.resources.wealth)})`;
+    return null;
+  }
+
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
     const hasLibrary = [...this.buildings.values()].some(
       (b) => b.type === 'library' && b.nation === this.playerNation

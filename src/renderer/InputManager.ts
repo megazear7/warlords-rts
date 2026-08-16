@@ -142,6 +142,12 @@ export class InputManager {
         return;
       }
 
+      if (e.code === 'Tab' && this.game && this.isGameplay()) {
+        e.preventDefault();
+        this.game.researchPanel.toggle();
+        return;
+      }
+
       if (!this.isGameplay() || !this.simulation) return;
       const sim = this.simulation;
 
@@ -265,16 +271,16 @@ export class InputManager {
           if (!e.ctrlKey) this.game?.saveSlot(1);
           break;
         case 'F1':
-          sim.tryResearch('science');
+          if (!sim.tryResearch('science')) this.game?.ui.showToast(sim.canTryResearch('science') ?? 'Cannot research');
           break;
         case 'F2':
-          sim.tryResearch('civic');
+          if (!sim.tryResearch('civic')) this.game?.ui.showToast(sim.canTryResearch('civic') ?? 'Cannot research');
           break;
         case 'F3':
-          sim.tryResearch('military');
+          if (!sim.tryResearch('military')) this.game?.ui.showToast(sim.canTryResearch('military') ?? 'Cannot research');
           break;
         case 'F4':
-          sim.tryResearch('commerce');
+          if (!sim.tryResearch('commerce')) this.game?.ui.showToast(sim.canTryResearch('commerce') ?? 'Cannot research');
           break;
       }
     });
