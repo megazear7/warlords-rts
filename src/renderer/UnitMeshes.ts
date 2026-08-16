@@ -3,8 +3,8 @@ import { Unit } from '../core/Simulation';
 
 /**
  * Manages visual representation of units.
- * Currently uses simple geometric placeholders (capsules / cylinders).
- * Later this will load real glTF models and use InstancedMesh.
+ * Currently uses simple geometric placeholders.
+ * Selection rings are shown for selected units.
  */
 export class UnitMeshes {
   private group = new THREE.Group();
@@ -14,7 +14,7 @@ export class UnitMeshes {
     scene.add(this.group);
   }
 
-  sync(units: Unit[]) {
+  sync(units: Unit[], selectedIds: Set<string>) {
     const seen = new Set<string>();
 
     for (const unit of units) {
@@ -27,7 +27,14 @@ export class UnitMeshes {
         this.group.add(mesh);
       }
 
-      mesh.position.set(unit.position.x, unit.position.y + 0.6, unit.position.z);
+      mesh.position.set(unit.position.x, unit.position.y, unit.position.z);
+
+      // Update selection ring visibility
+      const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
+      if (ring) {
+        const mat = ring.material as THREE.MeshBasicMaterial;
+        mat.opacity = selectedIds.has(unit.id) ? 0.85 : 0;
+      }
     }
 
     // Remove meshes for units that no longer exist
@@ -47,10 +54,7 @@ export class UnitMeshes {
     let color = 0xc4a35a; // default citizen tan
 
     if (unit.type === 'scout') color = 0x4a7c9b;
-    if (unit.nation === 'rome') {
-      // slight red tint for Rome
-      if (unit.type === 'citizen') color = 0xb08d57;
-    }
+    if (unit.nation === 'rome' && unit.type === 'citizen') color = 0xb08d57;
 
     const bodyMat = new THREE.MeshStandardMaterial({
       color,
@@ -70,20 +74,22 @@ export class UnitMeshes {
     head.castShadow = true;
     group.add(head);
 
-    // Tiny selection ring helper (always present for now)
-    const ringGeo = new THREE.RingGeometry(0.6, 0.75, 16);
+    // Selection ring
+    const ringGeo = new THREE.RingGeometry(0.55, 0.75, 24);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x44ff88,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.0, // hidden until selection system exists
+      opacity: 0,
+      depthWrite: false,
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.05;
+    ring.position.y = 0.08;
     group.add(ring);
 
     group.userData.unitId = unit.id;
+    group.userData.selectionRing = ring;
     return group;
   }
 }
