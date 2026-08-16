@@ -57,7 +57,6 @@ export class Game {
       onSettingsChanged: (s) => this.applySettings(s),
     });
 
-    // Unlock audio on first user gesture anywhere
     const unlock = () => {
       void audio.unlock();
       window.removeEventListener('pointerdown', unlock);
@@ -68,7 +67,6 @@ export class Game {
 
     this.applySettings(this.ui.getSettings());
     void audio.preloadFiles();
-    // Menu music starts after unlock; try immediately if already allowed
     audio.playMusic('music_menu');
   }
 
@@ -170,6 +168,7 @@ export class Game {
   applySettings(s: GameSettings) {
     this.input.setPanSpeedMultiplier(s.cameraPanSpeed);
     this.input.setZoomSpeedMultiplier(s.cameraZoomSpeed);
+    this.input.setEdgeScroll(s.edgeScroll);
     audio.applySettings(s);
     if (s.graphicsQuality === 'low') {
       this.renderer.renderer.setPixelRatio(1);
@@ -190,41 +189,29 @@ export class Game {
     this.prevEpoch = this.simulation.epochIndex;
   }
 
-  /** Infer gameplay SFX from state deltas (keeps Simulation pure of audio imports) */
   private processAudioCues() {
     const sim = this.simulation;
     const units = sim.getAllUnits().filter((u) => u.hp > 0);
     const unitCount = units.length;
 
-    // Deaths
-    if (unitCount < this.prevUnitCount) {
-      audio.play('combat_death');
-    }
+    if (unitCount < this.prevUnitCount) audio.play('combat_death');
     this.prevUnitCount = unitCount;
 
-    // City capture / nation flip
     for (const b of sim.getAllBuildings()) {
       const prev = this.prevBuildingNations.get(b.id);
-      if (prev != null && prev !== b.nation) {
-        audio.play('city_capture');
-      }
+      if (prev != null && prev !== b.nation) audio.play('city_capture');
       this.prevBuildingNations.set(b.id, b.nation as string);
     }
 
-    // Research finished
     const busy = !!sim.research.current;
-    if (this.prevResearchBusy && !busy) {
-      audio.play('research_complete');
-    }
+    if (this.prevResearchBusy && !busy) audio.play('research_complete');
     this.prevResearchBusy = busy;
 
-    // Epoch advanced
-    if (sim.epochIndex > this.prevEpoch) {
-      audio.play('epoch_advance');
-    }
+    if (sim.epochIndex > this.prevEpoch) audio.play('epoch_advance');
     this.prevEpoch = sim.epochIndex;
 
-    // Combat / siege hits (any unit currently striking)
+    if (sim.lastTrainComplete) audio.play('train_complete');
+
     for (const u of units) {
       if (u.attackTimer > 0 && u.attackTimer < 0.08) {
         if (u.attackBuildingId) audio.play('siege_hit');
@@ -232,7 +219,6 @@ export class Game {
       }
     }
 
-    // Attrition warning once while selected units suffer
     const selectedAttrition = sim.getSelectedUnits().some((u) => u.underAttrition);
     if (selectedAttrition && !this.attritionAlerted) {
       audio.play('alert_attrition');
@@ -255,6 +241,8 @@ export class Game {
     }
 
     if (this.mode === 'playing') {
+      this.input.updateEdgeScroll(frameTime);
+
       this.accumulator += frameTime;
       while (this.accumulator >= this.FIXED_DT) {
         this.simulation.step(this.FIXED_DT);
