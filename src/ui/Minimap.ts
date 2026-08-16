@@ -1,100 +1,110 @@
 import { Simulation } from '../core/Simulation';
+import { NATIONS, NationId } from '../data/nations';
 
-/**
- * Minimap canvas — shows explored cells + currently visible units/buildings/resources.
- * Click to pan camera. Filters by isExplored / isVisibleToPlayer.
- */
+const SIZE = 160;
+const WORLD = 120; // matches terrain half-extent-ish
+
 export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private sim: Simulation;
-  private size = 160;
-  private worldSize = 120;
+  private visible = false;
 
-  constructor(container: HTMLElement, sim: Simulation) {
-    this.sim = sim;
+  constructor() {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.size;
-    this.canvas.height = this.size;
-    this.canvas.style.cssText =
-      'position:absolute;bottom:12px;right:12px;border:2px solid #444;background:#111;cursor:pointer;z-index:40;';
-    container.appendChild(this.canvas);
+    this.canvas.id = 'minimap';
+    this.canvas.width = SIZE;
+    this.canvas.height = SIZE;
+    this.canvas.style.cssText = `
+      position: absolute; right: 12px; bottom: 12px;
+      width: ${SIZE}px; height: ${SIZE}px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(0,0,0,0.55);
+      z-index: 15;
+      display: none;
+      pointer-events: none;
+    `;
+    document.getElementById('app')?.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
-    this.canvas.addEventListener('click', this.onClick);
   }
 
-  dispose() {
-    this.canvas.removeEventListener('click', this.onClick);
-    this.canvas.remove();
+  setVisible(v: boolean) {
+    this.visible = v;
+    this.canvas.style.display = v ? 'block' : 'none';
   }
 
-  private onClick = (e: MouseEvent) => {
-    const rect = this.canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const x = (mx / this.size - 0.5) * this.worldSize;
-    const z = (my / this.size - 0.5) * this.worldSize;
-    // Camera pan is handled by Game/Renderer via event or direct; for now toast
-    (window as any).__warlordsMinimapClick?.({ x, z });
-  };
-
-  update() {
+  update(sim: Simulation) {
+    if (!this.visible) return;
     const ctx = this.ctx;
-    const s = this.size;
-    const w = this.worldSize;
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, s, s);
+    ctx.clearRect(0, 0, SIZE, SIZE);
 
-    // Explored cells (coarse)
-    const cell = 8;
-    const explored = (this.sim as any).exploredCells as Set<string> | undefined;
-    if (explored) {
-      ctx.fillStyle = '#1a1a2e';
-      for (const key of explored) {
-        const [cx, cz] = key.split(',').map(Number);
-        const px = ((cx * cell + cell / 2) / w + 0.5) * s;
-        const py = ((cz * cell + cell / 2) / w + 0.5) * s;
-        ctx.fillRect(px - 1, py - 1, 3, 3);
-      }
+    const toXY = (x: number, z: number) => ({
+      px: ((x + WORLD / 2) / WORLD) * SIZE,
+      py: ((z + WORLD / 2) / WORLD) * SIZE,
+    });
+
+    // Ground — unexplored near-black
+    ctx.fillStyle = '#0a0c0a';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Explored cells as muted terrain
+    const CELL = 8;
+    ctx.fillStyle = '#2a3a28';
+    for (const key of sim.exploredCells) {
+      const [gsx, gsz] = key.split(',').map(Number);
+      const wx = gsx * CELL + CELL / 2;
+      const wz = gsz * CELL + CELL / 2;
+      const { px, py } = toXY(wx, wz);
+      const s = (CELL / WORLD) * SIZE * 1.1;
+      ctx.fillRect(px - s / 2, py - s / 2, s, s);
     }
 
-    const isVisible = (x: number, z: number) =>
-      typeof (this.sim as any).isVisibleToPlayer === 'function'
-        ? (this.sim as any).isVisibleToPlayer(x, z)
-        : true;
-    const isExplored = (x: number, z: number) =>
-      typeof (this.sim as any).isExplored === 'function'
-        ? (this.sim as any).isExplored(x, z)
-        : true;
+    // Territory soft blobs via cities
+    for (const b of sim.getAllBuildings()) {
+      if (b.type !== 'city_center') continue;
+      const { px, py } = toXY(b.position.x, b.position.z);
+      const r =
+        ((b.nation === sim.playerNation ? sim.getTerritoryRadius() : 22) / WORLD) * SIZE;
+      const nationId = b.nation as NationId;
+      const color = NATIONS[nationId]?.color ?? 0x888888;
+      const hex = '#' + color.toString(16).padStart(6, '0');
+      ctx.beginPath();
+      ctx.fillStyle = hex + '44';
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Resources
-    for (const n of this.sim.getAllResourceNodes?.() ?? []) {
-      if (!isExplored(n.position.x, n.position.z)) continue;
-      ctx.fillStyle = n.type === 'food' ? '#4a4' : n.type === 'timber' ? '#864' : '#888';
-      const px = (n.position.x / w + 0.5) * s;
-      const py = (n.position.z / w + 0.5) * s;
-      ctx.fillRect(px - 1, py - 1, 2, 2);
+    for (const n of sim.getAllResourceNodes()) {
+      if (n.amount <= 0) continue;
+      if (!sim.isExplored(n.position)) continue;
+      const { px, py } = toXY(n.position.x, n.position.z);
+      ctx.fillStyle =
+        n.type === 'food' ? '#88cc44' : n.type === 'timber' ? '#aa7744' : '#aaaaaa';
+      ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
     }
 
-    // Buildings
-    for (const b of this.sim.getAllBuildings?.() ?? []) {
-      if (!isExplored(b.position.x, b.position.z) && b.nation !== this.sim.playerNation) continue;
-      if (b.nation !== this.sim.playerNation && !isVisible(b.position.x, b.position.z)) continue;
-      ctx.fillStyle = b.nation === this.sim.playerNation ? '#4af' : '#f44';
-      const px = (b.position.x / w + 0.5) * s;
-      const py = (b.position.z / w + 0.5) * s;
-      ctx.fillRect(px - 2, py - 2, 4, 4);
+    // Buildings (enemy only if in vision)
+    for (const b of sim.getAllBuildings()) {
+      if (b.nation !== sim.playerNation && !sim.isVisibleToPlayer(b.position)) continue;
+      const { px, py } = toXY(b.position.x, b.position.z);
+      const nationId = b.nation as NationId;
+      const color = NATIONS[nationId]?.color ?? 0x888888;
+      ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+      const s = b.type === 'city_center' ? 5 : 3;
+      ctx.fillRect(px - s / 2, py - s / 2, s, s);
     }
 
     // Units
-    for (const u of this.sim.getAllUnits?.() ?? []) {
+    for (const u of sim.getAllUnits()) {
+      if (u.nation !== sim.playerNation && !sim.isVisibleToPlayer(u.position)) continue;
       if (u.hp <= 0) continue;
-      if (u.nation !== this.sim.playerNation && !isVisible(u.position.x, u.position.z)) continue;
-      ctx.fillStyle = u.nation === this.sim.playerNation ? '#8cf' : '#f88';
-      const px = (u.position.x / w + 0.5) * s;
-      const py = (u.position.z / w + 0.5) * s;
+      const { px, py } = toXY(u.position.x, u.position.z);
+      const isPlayer = u.nation === sim.playerNation;
+      ctx.fillStyle = isPlayer ? '#44ff88' : '#ff5555';
+      if (sim.selected.has(u.id)) ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+      ctx.arc(px, py, isPlayer ? 2.2 : 2, 0, Math.PI * 2);
       ctx.fill();
     }
   }
