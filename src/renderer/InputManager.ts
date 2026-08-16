@@ -3,6 +3,7 @@ import { Renderer } from './Renderer';
 import { Simulation } from '../core/Simulation';
 import { EntityId } from '../core/types';
 import type { Game } from '../Game';
+import { audio } from '../audio/AudioManager';
 
 export class InputManager {
   private renderer: Renderer;
@@ -130,7 +131,6 @@ export class InputManager {
       if (!this.isGameplay() || !this.simulation) return;
       const sim = this.simulation;
 
-      // Control groups: Ctrl+0-9 set, 0-9 select
       const digitMatch = e.code.match(/^Digit(\d)$/);
       if (digitMatch) {
         const slot = Number(digitMatch[1]);
@@ -146,13 +146,13 @@ export class InputManager {
 
       switch (e.code) {
         case 'KeyF':
-          sim.tryBuildFarm();
+          if (sim.tryBuildFarm()) audio.play('build_place');
           break;
         case 'KeyB':
-          sim.tryBuildBarracks();
+          if (sim.tryBuildBarracks()) audio.play('build_place');
           break;
         case 'KeyL':
-          sim.tryBuildLibrary();
+          if (sim.tryBuildLibrary()) audio.play('build_place');
           break;
         case 'KeyT':
           sim.tryTrainLegionary();
@@ -167,7 +167,7 @@ export class InputManager {
           sim.tryTrainSupplyWagon();
           break;
         case 'KeyC':
-          sim.tryFoundCity();
+          if (sim.tryFoundCity()) audio.play('build_place');
           break;
         case 'KeyE': {
           const ok = sim.tryAdvanceEpoch();
@@ -283,6 +283,7 @@ export class InputManager {
       const unit = this.simulation.units.get(hitUnitId);
       if (unit && unit.nation !== this.simulation.playerNation) {
         this.simulation.orderAttackSelected(hitUnitId);
+        audio.play('order_attack');
         return;
       }
     }
@@ -292,6 +293,7 @@ export class InputManager {
       const b = this.simulation.buildings.get(hitBuildingId);
       if (b && b.nation !== this.simulation.playerNation) {
         this.simulation.orderAttackBuildingSelected(hitBuildingId);
+        audio.play('order_attack');
         return;
       }
     }
@@ -299,11 +301,15 @@ export class InputManager {
     const nodeId = this.raycastWithUserData(clientX, clientY, 'resourceNodeId');
     if (nodeId) {
       this.simulation.orderGatherSelected(nodeId);
+      audio.play('order_gather');
       return;
     }
 
     const point = this.raycastGround(clientX, clientY);
-    if (point) this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
+    if (point) {
+      this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
+      audio.play('order_move');
+    }
   }
 
   private raycastWithUserData(clientX: number, clientY: number, key: string): EntityId | null {
