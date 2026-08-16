@@ -63,8 +63,9 @@ export class Hud {
     const playerUnits = sim.getAllUnits().filter((u) => u.nation === sim.playerNation && u.hp > 0).length;
     const enemyUnits = sim.getAllUnits().filter((u) => u.nation !== sim.playerNation && u.hp > 0).length;
     const cityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation === sim.playerNation).length;
+    const enemyCityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation !== sim.playerNation).length;
 
-    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.cityLimit}`;
+    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.cityLimit} · enemy cities ${enemyCityCount}`;
 
     const nextEpoch = sim.getNextEpochDef();
     if (nextEpoch) {

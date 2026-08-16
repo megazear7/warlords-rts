@@ -390,7 +390,7 @@ export class UIManager {
     this.root.innerHTML = `
       <div class="menu-panel end-screen">
         <h1 class="${victory ? 'victory' : 'defeat'}">${victory ? 'Victory' : 'Defeat'}</h1>
-        <p>${victory ? 'The enemy has been vanquished.' : 'Your cities have fallen.'}</p>
+        <p>${victory ? 'All enemy cities captured.' : 'Your last city was captured.'}</p>
         <div class="menu-buttons">
           <button data-action="new">New Game</button>
           <button data-action="menu" class="secondary">Main Menu</button>
