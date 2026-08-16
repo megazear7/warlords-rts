@@ -6,12 +6,10 @@ import { UIManager } from './ui/UIManager';
 import { SaveSystem } from './core/SaveSystem';
 import { ProfileStore } from './core/Profile';
 import { GameSettings } from './core/Settings';
+import { NationId } from './data/nations';
 
 export type GameMode = 'menu' | 'playing' | 'paused' | 'ended';
 
-/**
- * Top-level orchestrator with menu / pause / save flow.
- */
 export class Game {
   readonly simulation: Simulation;
   readonly renderer: Renderer;
@@ -40,7 +38,7 @@ export class Game {
     this.hud.setVisible(false);
 
     this.ui = new UIManager({
-      onNewGame: () => this.newGame(),
+      onNewGame: (nation) => this.newGame(nation),
       onLoadSlot: (slot) => this.loadSlot(slot),
       onSaveSlot: (slot) => this.saveSlot(slot),
       onResume: () => this.resume(),
@@ -63,17 +61,16 @@ export class Game {
     this.running = false;
   }
 
-  // ── Mode transitions ───────────────────────────────────────
-
-  newGame() {
+  newGame(nation?: NationId) {
+    const n = nation ?? this.ui.getProfile().preferredNation;
     this.simulation.reset();
-    this.simulation.bootstrapDemoWorld();
+    this.simulation.bootstrapDemoWorld(n);
     this.input.setSimulation(this.simulation);
     this.mode = 'playing';
     this.endRecorded = false;
     this.ui.show('none');
     this.hud.setVisible(true);
-    this.ui.showToast('New campaign started');
+    this.ui.showToast(`Playing as ${n} — ${this.simulation.getCurrentEpochName()}`);
   }
 
   loadSlot(slot: number) {
@@ -125,7 +122,6 @@ export class Game {
   applySettings(s: GameSettings) {
     this.input.setPanSpeedMultiplier(s.cameraPanSpeed);
     this.input.setZoomSpeedMultiplier(s.cameraZoomSpeed);
-    // Graphics quality could adjust pixel ratio later
     if (s.graphicsQuality === 'low') {
       this.renderer.renderer.setPixelRatio(1);
     } else if (s.graphicsQuality === 'medium') {
@@ -135,15 +131,12 @@ export class Game {
     }
   }
 
-  // ── Loop ───────────────────────────────────────────────────
-
   private loop = (now: number) => {
     if (!this.running) return;
 
     const frameTime = Math.min((now - this.lastTime) / 1000, 0.25);
     this.lastTime = now;
 
-    // FPS counter
     this.fpsFrames++;
     if (now - this.fpsLast >= 1000) {
       this.fps = this.fpsFrames;
@@ -158,7 +151,6 @@ export class Game {
         this.accumulator -= this.FIXED_DT;
       }
 
-      // Win / lose checks
       const outcome = this.simulation.checkOutcome();
       if (outcome === 'victory' || outcome === 'defeat') {
         this.mode = 'ended';
@@ -171,7 +163,6 @@ export class Game {
       }
     }
 
-    // Always render world (menu shows over it)
     const alpha = this.accumulator / this.FIXED_DT;
     this.renderer.render(this.simulation, alpha);
 
