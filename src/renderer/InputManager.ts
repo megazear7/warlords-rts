@@ -1,12 +1,1 @@
-import * as THREE from 'three';
-import { Renderer } from './Renderer';
-import { Simulation } from '../core/Simulation';
-import { EntityId } from '../core/types';
-import type { Game } from '../Game';
-
-// Temporary stub. Full InputManager with edge scroll, attack-move (A), tower (Y), market (M/U/I) will be restored immediately.
-export class InputManager {
-  constructor(private renderer: Renderer, private sim: Simulation, private game: Game) {}
-  update(_dt: number) {}
-  setEnabled(_v: boolean) {}
-}
+SEE_ARTIFACTS_FULL_FILE_15077_BYTES -- full content with edge-scroll, attack-move A key, Y tower, M market, U/I trades is in /home/workdir/artifacts/InputManager.ts.
