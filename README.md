@@ -1,66 +1,47 @@
 # Warlords RTS
 
-A modern 3D browser-based real-time strategy game inspired by *Rise of Nations*.
+Modern browser-based 3D RTS inspired by Rise of Nations.  
+**Nations:** Rome · Persia · Egypt · Gauls  
+**Key design:** Nation-unique epochs (no shared Ages) · four research tracks · capture-only cities · attrition + supply · fog of war
 
-**Nations at launch:** Rome · Persia · Egypt · Gauls  
-**Key innovation:** Nation-unique Epochs instead of shared Ages
-
-## Current Status — Early Phase 1
-
-Playable right now:
-
-- Procedural terrain + placeholder City Center
-- Citizens + Scout
-- **Unit selection** (click + box select)
-- **Move orders**
-- **Resource nodes** (food bushes, trees, metal rocks)
-- **Gathering** (right-click a resource with citizens selected)
-- **Build Farm** (press **F** with citizens selected, costs 60 timber)
-- Resource + selection HUD
-- RTS camera
-
-## Design Documentation
-
-→ [Warlords Notion Hub](https://app.notion.com/p/Warlords-3be290435c2f809e8fefee45284db1fa)
-
-## Getting Started
+## Quick start
 
 ```bash
-git clone https://github.com/megazear7/warlords-rts.git
+git clone https://github.com/megazear7/warlords-rts
 cd warlords-rts
 npm install
 npm run dev
 ```
 
-### Controls
+> **Note (2026-08-16):** Full `Simulation.ts` (~42 KB, includes formation offsets) is maintained in the project artifacts.  
+> If restore reports an incomplete payload, copy the authoritative file into `src/core/Simulation.ts`.  
+> **InputManager**, Renderer, Hud, BuildingMeshes, FogMeshes are fully on main.
 
-| Input | Action |
-|-------|--------|
-| Left-click unit | Select |
-| Left-drag | Box select |
-| Shift + left-drag | Pan camera |
-| Right-click ground | Move selected units |
-| Right-click resource | Order citizens to gather |
-| Right-drag | Orbit camera |
-| Mouse wheel | Zoom |
-| **F** | Build Farm (citizens selected + 60 timber) |
+## Controls (highlights)
 
-## Project Structure
+| Key | Action |
+|-----|--------|
+| **A** | Attack-move (then right-click) |
+| **H** | Wall (requires Military 2) |
+| **Y** | Watchtower (Military 1) |
+| **M** | Market (Commerce 1) |
+| **G** | Train General |
+| **V** | Train citizen |
+| **U** / **I** | Market sell food / buy metal |
+| **F1–F4** | Research tracks |
+| **E** | Advance epoch |
+| **Ctrl+0-9** | Control groups |
+| Box select · edge-scroll · rally points | |
 
-```
-src/
-  core/           # Pure simulation
-  renderer/       # Three.js view + input + meshes
-  ui/             # HUD
-  main.ts
-  Game.ts
-```
+## Architecture
 
-## Roadmap
+- Fixed-timestep Simulation (20 Hz) separated from Three.js Renderer
+- Science / Civic / Military / Commerce research
+- Attrition outside territory unless supply wagons connect to a city
+- Generals with auras · fog of war (explored + current vision)
 
-- **Phase 0** ✅ Setup + scene + camera
-- **Phase 1** (in progress) Selection, movement, gathering, buildings
-- **Phase 2** Research tracks, attrition/supply, borders
-- **Phase 3** Four nations + Epochs
-- **Phase 4** Polish + AI
-- **Phase 5** Multiplayer
+## Design docs
+
+→ [Warlords Notion Hub](https://app.notion.com/p/Warlords-3be290435c2f809e8fefee45284db1fa)
+
+Repo: https://github.com/megazear7/warlords-rts
