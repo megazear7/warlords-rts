@@ -1,5 +1,6 @@
 import { Simulation } from '../core/Simulation';
 import { NATIONS } from '../data/nations';
+import { getTrainableForNation } from '../data/units';
 
 export class Hud {
   private root: HTMLElement;
@@ -7,6 +8,7 @@ export class Hud {
   private selectionEl: HTMLElement;
   private researchEl: HTMLElement;
   private epochEl: HTMLElement;
+  private unitsEl: HTMLElement;
   private fpsEl: HTMLElement;
 
   constructor() {
@@ -23,9 +25,10 @@ export class Hud {
       <div class="hud-resources" id="hud-resources"></div>
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
+      <div class="hud-units" id="hud-units"></div>
       <div class="hud-help">
-        Esc pause · E advance epoch · W train supply wagon · S quick-save<br/>
-        Units outside your borders take attrition unless supplied by wagons
+        Ctrl+0-9 control groups · F1–F4 research · E epoch · T infantry · R elite · Q scout · W wagon<br/>
+        Double-click unit = select all of type · Right-click enemy city to siege
       </div>
     `;
 
@@ -33,6 +36,7 @@ export class Hud {
     this.selectionEl = document.getElementById('hud-selection') as HTMLElement;
     this.researchEl = document.getElementById('hud-research') as HTMLElement;
     this.epochEl = document.getElementById('hud-epoch') as HTMLElement;
+    this.unitsEl = document.getElementById('hud-units') as HTMLElement;
     this.fpsEl = document.getElementById('hud-fps') as HTMLElement;
   }
 
@@ -46,7 +50,7 @@ export class Hud {
     const playerUnits = sim.getAllUnits().filter((u) => u.nation === sim.playerNation).length;
     const enemyUnits = sim.getAllUnits().filter((u) => u.nation !== sim.playerNation).length;
 
-    this.epochEl.textContent = `${nation.name} — ${sim.getCurrentEpochName()} (E to advance)`;
+    this.epochEl.textContent = `${nation.name} — ${sim.getCurrentEpochName()} (E)`;
 
     this.resourcesEl.innerHTML = `
       <span>🍞 ${Math.floor(r.food)}</span>
@@ -66,7 +70,8 @@ export class Hud {
       if (building.productionTimer != null && building.productionTimer > 0) {
         extra = ` · training ${building.productionType} (${building.productionTimer.toFixed(1)}s)`;
       }
-      this.selectionEl.textContent = `Building: ${building.type}${extra}`;
+      const hp = `${Math.ceil(building.hp)}/${building.maxHp}`;
+      this.selectionEl.textContent = `Building: ${building.type} (${hp})${extra}`;
     } else if (selected.length === 0) {
       this.selectionEl.textContent = 'No selection';
     } else if (selected.length === 1) {
@@ -74,8 +79,8 @@ export class Hud {
       let extra = '';
       if (u.gatherTargetId) extra = ' · gathering';
       if (u.attackTargetId) extra = ' · attacking';
+      if (u.attackBuildingId) extra = ' · sieging';
       if (u.underAttrition) extra += ' · ⚠ attrition';
-      if (u.type === 'supply_wagon') extra += ' · supply';
       this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
       const attr = selected.filter((u) => u.underAttrition).length;
@@ -87,6 +92,12 @@ export class Hud {
     let researchText = `Sci ${rs.science} · Civ ${rs.civic} · Mil ${rs.military} · Com ${rs.commerce}`;
     if (rs.current) researchText += ` · ${rs.current} ${Math.floor(rs.progress * 100)}%`;
     this.researchEl.textContent = researchText;
+
+    const trainable = getTrainableForNation(sim.playerNation, sim.epochIndex);
+    this.unitsEl.textContent =
+      'Barracks: ' +
+      trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ') +
+      ' · Wagon';
 
     this.fpsEl.textContent = fps != null ? `· ${fps} FPS` : '';
   }
