@@ -1,9 +1,11 @@
 import { SaveSystem, SAVE_SLOTS } from '../core/SaveSystem';
 import { SettingsStore, GameSettings, DEFAULT_SETTINGS } from '../core/Settings';
 import { ProfileStore, PlayerProfile } from '../core/Profile';
+import { NationId, NATIONS } from '../data/nations';
 
 export type UIScreen =
   | 'main'
+  | 'nation'
   | 'load'
   | 'save'
   | 'settings'
@@ -11,10 +13,10 @@ export type UIScreen =
   | 'pause'
   | 'victory'
   | 'defeat'
-  | 'none'; // in-game HUD only
+  | 'none';
 
 export interface UICallbacks {
-  onNewGame: () => void;
+  onNewGame: (nation?: NationId) => void;
   onLoadSlot: (slot: number) => void;
   onSaveSlot: (slot: number) => void;
   onResume: () => void;
@@ -30,6 +32,7 @@ export class UIManager {
   private profile: PlayerProfile;
   private toastEl: HTMLElement;
   private toastTimer = 0;
+  private returnTo: UIScreen = 'main';
 
   constructor(callbacks: UICallbacks) {
     this.callbacks = callbacks;
@@ -70,6 +73,9 @@ export class UIManager {
       case 'main':
         this.renderMainMenu();
         break;
+      case 'nation':
+        this.renderNationSelect();
+        break;
       case 'load':
         this.renderLoadMenu();
         break;
@@ -103,15 +109,13 @@ export class UIManager {
     }, durationMs);
   }
 
-  // ── Screens ────────────────────────────────────────────────
-
   private renderMainMenu() {
     const hasSaves = SaveSystem.hasAnySave();
     this.root.innerHTML = `
       <div class="menu-panel main-menu">
         <div class="menu-brand">
           <h1>WARLORDS</h1>
-          <p class="tagline">A Rise of Nations–inspired RTS</p>
+          <p class="tagline">Nation-unique epochs · Attrition · Supply lines</p>
         </div>
         <div class="menu-buttons">
           <button data-action="new">New Game</button>
@@ -124,11 +128,49 @@ export class UIManager {
     `;
 
     this.bind(this.root, {
-      new: () => this.callbacks.onNewGame(),
-      load: () => this.show('load'),
-      settings: () => this.show('settings'),
-      profile: () => this.show('profile'),
+      new: () => this.show('nation'),
+      load: () => {
+        this.returnTo = 'main';
+        this.show('load');
+      },
+      settings: () => {
+        this.returnTo = 'main';
+        this.show('settings');
+      },
+      profile: () => {
+        this.returnTo = 'main';
+        this.show('profile');
+      },
     });
+  }
+
+  private renderNationSelect() {
+    const cards = (Object.keys(NATIONS) as NationId[])
+      .map((id) => {
+        const n = NATIONS[id];
+        const ep = n.epochs.map((e) => e.name).join(' → ');
+        return `<button class="slot-btn" data-action="pick-${id}">
+          <strong>${escapeHtml(n.name)}</strong><br/>
+          <span class="slot-meta">${escapeHtml(ep)}</span>
+        </button>`;
+      })
+      .join('');
+
+    this.root.innerHTML = `
+      <div class="menu-panel">
+        <h2>Choose Nation</h2>
+        <div class="slot-list">${cards}</div>
+        <button data-action="back" class="secondary">Back</button>
+      </div>
+    `;
+
+    const actions: Record<string, () => void> = {
+      back: () => this.show('main'),
+    };
+    for (const id of Object.keys(NATIONS) as NationId[]) {
+      actions[`pick-${id}`] = () => this.callbacks.onNewGame(id);
+    }
+    this.bind(this.root, actions);
   }
 
   private renderLoadMenu() {
@@ -156,7 +198,7 @@ export class UIManager {
     `;
 
     const actions: Record<string, () => void> = {
-      back: () => this.show(this.wasPaused() ? 'pause' : 'main'),
+      back: () => this.show(this.returnTo),
     };
     for (let i = 1; i <= SAVE_SLOTS; i++) {
       actions[`load-${i}`] = () => this.callbacks.onLoadSlot(i);
@@ -228,7 +270,7 @@ export class UIManager {
       back: () => {
         SettingsStore.save(this.settings);
         this.callbacks.onSettingsChanged(this.settings);
-        this.show(this.wasPaused() ? 'pause' : 'main');
+        this.show(this.returnTo);
       },
       reset: () => {
         this.settings = { ...DEFAULT_SETTINGS };
@@ -307,11 +349,12 @@ export class UIManager {
         this.showToast('Profile saved');
         this.renderProfile();
       },
-      back: () => this.show(this.wasPaused() ? 'pause' : 'main'),
+      back: () => this.show(this.returnTo),
     });
   }
 
   private renderPauseMenu() {
+    this.returnTo = 'pause';
     this.root.innerHTML = `
       <div class="menu-panel">
         <h2>Paused</h2>
@@ -347,14 +390,9 @@ export class UIManager {
     `;
 
     this.bind(this.root, {
-      new: () => this.callbacks.onNewGame(),
+      new: () => this.show('nation'),
       menu: () => this.callbacks.onQuitToMenu(),
     });
-  }
-
-  private wasPaused(): boolean {
-    // Heuristic: if we navigated from pause context — Game tracks mode; UI uses simple back targets
-    return false;
   }
 
   private bind(root: HTMLElement, actions: Record<string, () => void>) {
