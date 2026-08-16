@@ -1073,7 +1073,7 @@ export class Simulation {
   }
 
   private cityCivicRequirementForNext(currentCities: number): number {
-    return Math.max(0, currentCities);
+    return currentCities;
   }
 
   getPlayerCityLimit(): number {
