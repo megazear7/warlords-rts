@@ -13,6 +13,7 @@ export interface Unit {
   target?: Vec3;
   gatherTargetId?: EntityId;
   attackTargetId?: EntityId;
+  attackBuildingId?: EntityId;
   speed: number;
   nation: NationId | string;
   type: string;
@@ -22,7 +23,6 @@ export interface Unit {
   attackRange: number;
   attackCooldown: number;
   attackTimer: number;
-  /** Taking attrition (for HUD) */
   underAttrition?: boolean;
   carrying?: { type: 'food' | 'timber' | 'metal'; amount: number };
 }
@@ -75,12 +75,10 @@ const UNIT_STATS: Record<
   enemy_warrior: { hp: 90, speed: 3.8, attack: 14, range: 1.8, cooldown: 1.15 },
 };
 
-/** Attrition DPS when unsupplied in enemy/neutral territory */
 const ATTRITION_DPS = 4;
-/** Max distance for a unit to count as supplied by a city or wagon */
 const SUPPLY_RANGE = 14;
-/** Max distance wagon→city (or wagon→wagon chain hop) */
 const WAGON_LINK_RANGE = 18;
+const BUILDING_ATTACK_RANGE = 2.5;
 
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
@@ -104,7 +102,6 @@ export class Simulation {
   };
 
   playerNation: NationId = 'rome';
-  /** Current epoch index for the player nation */
   epochIndex = 0;
 
   selected: Set<EntityId> = new Set();
@@ -145,7 +142,6 @@ export class Simulation {
     return getEpoch(this.playerNation, this.epochIndex).name;
   }
 
-  /** Territory radius from player cities */
   getTerritoryRadius(): number {
     const b = this.getBonuses();
     return b.territoryRadius + this.research.civic * 2;
@@ -160,7 +156,6 @@ export class Simulation {
     return false;
   }
 
-  /** Unit is supplied if near a friendly city or a supply chain of wagons to a city */
   isSupplied(unit: Unit): boolean {
     if (this.isInFriendlyTerritory(unit.position, unit.nation)) return true;
 
@@ -168,7 +163,6 @@ export class Simulation {
       (u) => u.nation === unit.nation && u.type === 'supply_wagon' && u.hp > 0
     );
 
-    // BFS: unit → wagons → ... → city
     const reachable = new Set<EntityId>();
     const queue: Unit[] = [];
 
@@ -182,7 +176,6 @@ export class Simulation {
     while (queue.length) {
       const w = queue.shift()!;
       if (this.isInFriendlyTerritory(w.position, unit.nation)) return true;
-
       for (const other of wagons) {
         if (reachable.has(other.id)) continue;
         if (distanceXZ(w.position, other.position) <= WAGON_LINK_RANGE) {
@@ -191,30 +184,21 @@ export class Simulation {
         }
       }
     }
-
     return false;
   }
 
   checkOutcome(): 'victory' | 'defeat' | null {
     let playerCities = 0;
-    let enemyUnits = 0;
+    let enemyCities = 0;
 
     for (const b of this.buildings.values()) {
-      if (b.type === 'city_center' && b.nation === this.playerNation) playerCities++;
-    }
-    for (const u of this.units.values()) {
-      if (u.nation !== this.playerNation && u.hp > 0) enemyUnits++;
+      if (b.type !== 'city_center') continue;
+      if (b.nation === this.playerNation) playerCities++;
+      else enemyCities++;
     }
 
     if (playerCities === 0) return 'defeat';
-
-    if (enemyUnits === 0) {
-      for (const b of this.buildings.values()) {
-        if (b.nation !== this.playerNation) b.nation = this.playerNation;
-      }
-      return 'victory';
-    }
-
+    if (enemyCities === 0) return 'victory';
     return null;
   }
 
@@ -223,7 +207,7 @@ export class Simulation {
     this.epochIndex = 0;
 
     const enemyNation: NationId =
-      playerNation === 'gaul' ? 'rome' : playerNation === 'rome' ? 'gaul' : 'gaul';
+      playerNation === 'gaul' ? 'rome' : 'gaul';
 
     this.addBuilding('city_center', playerNation, { x: 0, y: 0, z: 0 }, 2000);
 
@@ -236,7 +220,6 @@ export class Simulation {
       });
     }
     this.spawnUnit('scout', playerNation, { x: 25, y: 0, z: 15 });
-    // Starting supply wagon
     this.spawnUnit('supply_wagon', playerNation, { x: 6, y: 0, z: -6 });
 
     this.addBuilding('city_center', enemyNation, { x: 55, y: 0, z: -40 }, 1500);
@@ -267,8 +250,7 @@ export class Simulation {
   private spawnUnit(type: string, nation: string, position: Vec3): EntityId {
     const stats = UNIT_STATS[type] ?? UNIT_STATS.citizen;
     const id = createEntityId();
-    const attackMul =
-      nation === this.playerNation ? this.getBonuses().attackMul : 1;
+    const attackMul = nation === this.playerNation ? this.getBonuses().attackMul : 1;
     this.units.set(id, {
       id,
       position: { ...position },
@@ -285,12 +267,7 @@ export class Simulation {
     return id;
   }
 
-  private addBuilding(
-    type: string,
-    nation: string,
-    position: Vec3,
-    hp: number
-  ): EntityId {
+  private addBuilding(type: string, nation: string, position: Vec3, hp: number): EntityId {
     const id = createEntityId();
     this.buildings.set(id, {
       id,
@@ -338,27 +315,26 @@ export class Simulation {
 
     if (this.research.current && this.research.timeRemaining > 0) {
       this.research.timeRemaining -= dt * bonuses.researchSpeedMul;
-      const total = this.researchTimeFor() / bonuses.researchSpeedMul;
       this.research.progress = Math.min(
         1,
-        1 - this.research.timeRemaining / (this.researchTimeFor())
+        1 - this.research.timeRemaining / this.researchTimeFor()
       );
       if (this.research.timeRemaining <= 0) this.completeResearch();
     }
 
-    const toRemove: EntityId[] = [];
+    const toRemoveUnits: EntityId[] = [];
+    const toRemoveBuildings: EntityId[] = [];
 
     for (const unit of this.units.values()) {
       unit.attackTimer = Math.max(0, unit.attackTimer - dt);
       if (unit.hp <= 0) {
-        toRemove.push(unit.id);
+        toRemoveUnits.push(unit.id);
         continue;
       }
 
-      // Attrition (player + AI)
       this.updateAttrition(unit, dt, bonuses.attritionResist);
 
-      if (unit.attackTargetId) {
+      if (unit.attackTargetId || unit.attackBuildingId) {
         this.updateCombat(unit, dt);
         continue;
       }
@@ -386,41 +362,75 @@ export class Simulation {
       unit.position.z += (dz / dist) * step;
     }
 
-    for (const id of toRemove) {
+    for (const id of toRemoveUnits) {
       this.units.delete(id);
       this.selected.delete(id);
     }
+    for (const id of toRemoveBuildings) this.buildings.delete(id);
 
     this.aiTimer -= dt;
     if (this.aiTimer <= 0) {
-      this.aiTimer = 5 + Math.random() * 4;
+      this.aiTimer = 4 + Math.random() * 3;
       this.runSimpleAI();
     }
   }
 
   private updateAttrition(unit: Unit, dt: number, resist: number) {
-    // Citizens / wagons also take attrition outside supply
     const friendly = this.isInFriendlyTerritory(unit.position, unit.nation);
     const supplied = friendly || this.isSupplied(unit);
     unit.underAttrition = !supplied;
-
     if (supplied) return;
-
-    const dmg = ATTRITION_DPS * (1 - resist) * dt;
-    unit.hp -= dmg;
+    unit.hp -= ATTRITION_DPS * (1 - resist) * dt;
   }
 
   private updateCombat(unit: Unit, dt: number) {
-    const target = this.units.get(unit.attackTargetId!);
-    if (!target || target.hp <= 0 || target.nation === unit.nation) {
-      unit.attackTargetId = undefined;
+    // Prefer unit target
+    if (unit.attackTargetId) {
+      const target = this.units.get(unit.attackTargetId);
+      if (!target || target.hp <= 0 || target.nation === unit.nation) {
+        unit.attackTargetId = undefined;
+        return;
+      }
+      this.chaseAndStrike(unit, target.position, target.attackRange, dt, () => {
+        target.hp -= unit.attack;
+        if (
+          !target.attackTargetId &&
+          !target.attackBuildingId &&
+          distanceXZ(target.position, unit.position) <= target.attackRange + 0.5
+        ) {
+          target.attackTargetId = unit.id;
+        }
+      });
       return;
     }
-    const dist = distanceXZ(unit.position, target.position);
-    if (dist > unit.attackRange) {
-      unit.target = { ...target.position };
-      const dx = target.position.x - unit.position.x;
-      const dz = target.position.z - unit.position.z;
+
+    // Building siege
+    if (unit.attackBuildingId) {
+      const b = this.buildings.get(unit.attackBuildingId);
+      if (!b || b.nation === unit.nation) {
+        unit.attackBuildingId = undefined;
+        return;
+      }
+      this.chaseAndStrike(unit, b.position, BUILDING_ATTACK_RANGE, dt, () => {
+        // Siege deals reduced damage vs buildings
+        b.hp -= unit.attack * 0.65;
+        if (b.hp <= 0) this.resolveBuildingDestroyed(b, unit.nation);
+      });
+    }
+  }
+
+  private chaseAndStrike(
+    unit: Unit,
+    targetPos: Vec3,
+    range: number,
+    dt: number,
+    onHit: () => void
+  ) {
+    const dist = distanceXZ(unit.position, targetPos);
+    if (dist > range) {
+      unit.target = { ...targetPos };
+      const dx = targetPos.x - unit.position.x;
+      const dz = targetPos.z - unit.position.z;
       const step = Math.min(unit.speed * dt, dist);
       unit.position.x += (dx / dist) * step;
       unit.position.z += (dz / dist) * step;
@@ -428,13 +438,30 @@ export class Simulation {
     }
     unit.target = undefined;
     if (unit.attackTimer <= 0 && unit.attack > 0) {
-      target.hp -= unit.attack;
+      onHit();
       unit.attackTimer = unit.attackCooldown;
-      if (
-        !target.attackTargetId &&
-        distanceXZ(target.position, unit.position) <= target.attackRange + 0.5
-      ) {
-        target.attackTargetId = unit.id;
+    }
+  }
+
+  /** Cities are captured, not destroyed. Other buildings are removed. */
+  private resolveBuildingDestroyed(b: Building, capturerNation: string) {
+    if (b.type === 'city_center') {
+      b.nation = capturerNation;
+      b.hp = b.maxHp * 0.4;
+      // Clear siege orders targeting this building from former owners
+      for (const u of this.units.values()) {
+        if (u.attackBuildingId === b.id && u.nation !== capturerNation) {
+          u.attackBuildingId = undefined;
+        }
+      }
+      if (this.selectedBuildingId === b.id && capturerNation !== this.playerNation) {
+        this.selectedBuildingId = null;
+      }
+    } else {
+      this.buildings.delete(b.id);
+      if (this.selectedBuildingId === b.id) this.selectedBuildingId = null;
+      for (const u of this.units.values()) {
+        if (u.attackBuildingId === b.id) u.attackBuildingId = undefined;
       }
     }
   }
@@ -473,24 +500,46 @@ export class Simulation {
 
   private runSimpleAI() {
     const enemies = [...this.units.values()].filter(
-      (u) => u.nation !== this.playerNation && u.hp > 0
+      (u) => u.nation !== this.playerNation && u.hp > 0 && u.type !== 'supply_wagon'
     );
     const players = [...this.units.values()].filter(
       (u) => u.nation === this.playerNation && u.hp > 0
     );
-    if (enemies.length === 0 || players.length === 0) return;
-    const attackers = enemies.filter((e) => !e.attackTargetId).slice(0, 2);
-    for (const a of attackers) {
-      let nearest: Unit | null = null;
-      let best = Infinity;
+    const playerCities = [...this.buildings.values()].filter(
+      (b) => b.nation === this.playerNation && b.type === 'city_center'
+    );
+
+    for (const a of enemies) {
+      if (a.attackTargetId || a.attackBuildingId) continue;
+
+      // Prefer nearby player units
+      let nearestUnit: Unit | null = null;
+      let bestU = Infinity;
       for (const p of players) {
         const d = distanceXZ(a.position, p.position);
-        if (d < best) {
-          best = d;
-          nearest = p;
+        if (d < bestU) {
+          bestU = d;
+          nearestUnit = p;
         }
       }
-      if (nearest && best < 70) a.attackTargetId = nearest.id;
+      if (nearestUnit && bestU < 55) {
+        a.attackTargetId = nearestUnit.id;
+        continue;
+      }
+
+      // Otherwise siege nearest player city
+      let nearestCity: Building | null = null;
+      let bestC = Infinity;
+      for (const c of playerCities) {
+        const d = distanceXZ(a.position, c.position);
+        if (d < bestC) {
+          bestC = d;
+          nearestCity = c;
+        }
+      }
+      if (nearestCity && bestC < 80) {
+        a.attackBuildingId = nearestCity.id;
+      }
     }
   }
 
@@ -537,8 +586,6 @@ export class Simulation {
     if (track === 'civic') this.cityLimit += 1;
   }
 
-  // ── Selection ──────────────────────────────────────────────
-
   clearSelection() {
     this.selected.clear();
     this.selectedBuildingId = null;
@@ -584,8 +631,6 @@ export class Simulation {
     return this.buildings.get(this.selectedBuildingId) ?? null;
   }
 
-  // ── Commands ───────────────────────────────────────────────
-
   orderMoveSelected(target: Vec3) {
     for (const id of this.selected) this.orderMove(id, target);
   }
@@ -596,6 +641,7 @@ export class Simulation {
     unit.target = { ...target };
     unit.gatherTargetId = undefined;
     unit.attackTargetId = undefined;
+    unit.attackBuildingId = undefined;
   }
 
   orderGatherSelected(nodeId: EntityId) {
@@ -606,6 +652,7 @@ export class Simulation {
       if (!unit || unit.type !== 'citizen') continue;
       unit.gatherTargetId = nodeId;
       unit.attackTargetId = undefined;
+      unit.attackBuildingId = undefined;
       unit.target = { ...node.position };
     }
   }
@@ -617,6 +664,20 @@ export class Simulation {
       const unit = this.units.get(id);
       if (!unit || unit.type === 'supply_wagon') continue;
       unit.attackTargetId = targetUnitId;
+      unit.attackBuildingId = undefined;
+      unit.gatherTargetId = undefined;
+      unit.target = undefined;
+    }
+  }
+
+  orderAttackBuildingSelected(buildingId: EntityId) {
+    const b = this.buildings.get(buildingId);
+    if (!b || b.nation === this.playerNation) return;
+    for (const id of this.selected) {
+      const unit = this.units.get(id);
+      if (!unit || unit.type === 'supply_wagon') continue;
+      unit.attackBuildingId = buildingId;
+      unit.attackTargetId = undefined;
       unit.gatherTargetId = undefined;
       unit.target = undefined;
     }
@@ -724,7 +785,6 @@ export class Simulation {
     return true;
   }
 
-  /** Advance to the next nation-unique epoch */
   tryAdvanceEpoch(): boolean {
     const epochs = NATIONS[this.playerNation].epochs;
     if (this.epochIndex >= epochs.length - 1) return false;
@@ -735,7 +795,6 @@ export class Simulation {
     this.resources.wealth -= next.wealthCost;
     this.epochIndex += 1;
     this.applyEpochPopCap();
-    // Refresh attack values on player military
     const mul = this.getBonuses().attackMul;
     for (const u of this.units.values()) {
       if (u.nation !== this.playerNation) continue;
