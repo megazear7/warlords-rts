@@ -20,10 +20,10 @@ export class Hud {
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-help">
-        <strong>F</strong> Farm · <strong>B</strong> Barracks · <strong>L</strong> Library<br/>
-        Select Barracks + <strong>T</strong> = Train Legionary<br/>
-        <strong>1</strong> Science · <strong>2</strong> Civic · <strong>3</strong> Military · <strong>4</strong> Commerce<br/>
-        Click building to select · Right-click resource to gather
+        <strong>F</strong> Farm · <strong>B</strong> Barracks · <strong>L</strong> Library · <strong>C</strong> Found City<br/>
+        Barracks + <strong>T</strong> = Train Legionary<br/>
+        <strong>1–4</strong> Research · Right-click enemy = Attack<br/>
+        Enemy camp is to the north-east (green units)
       </div>
     `;
 
@@ -34,13 +34,17 @@ export class Hud {
 
   update(sim: Simulation) {
     const r = sim.resources;
+    const playerUnits = sim.getAllUnits().filter((u) => u.nation === 'rome').length;
+    const enemyUnits = sim.getAllUnits().filter((u) => u.nation === 'gaul').length;
+
     this.resourcesEl.innerHTML = `
       <span title="Food">🍞 ${Math.floor(r.food)}</span>
       <span title="Timber">🪵 ${Math.floor(r.timber)}</span>
       <span title="Metal">⚙️ ${Math.floor(r.metal)}</span>
       <span title="Wealth">💰 ${Math.floor(r.wealth)}</span>
       <span title="Knowledge">📚 ${Math.floor(r.knowledge)}</span>
-      <span title="Pop">👥 ${sim.units.size}/${sim.popCap}</span>
+      <span title="Pop">👥 ${playerUnits}/${sim.popCap}</span>
+      <span title="Enemies">⚔ ${enemyUnits}</span>
     `;
 
     const selected = sim.getSelectedUnits();
@@ -58,16 +62,17 @@ export class Hud {
       const u = selected[0];
       let extra = '';
       if (u.gatherTargetId) extra = ' · gathering';
+      if (u.attackTargetId) extra = ' · attacking';
       if (u.carrying) extra += ` · carrying ${Math.floor(u.carrying.amount)} ${u.carrying.type}`;
-      this.selectionEl.textContent = `Selected: ${u.type} (${u.hp}/${u.maxHp} HP)${extra}`;
+      this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
       this.selectionEl.textContent = `Selected: ${selected.length} units`;
     }
 
     const rs = sim.research;
-    let researchText = `Sci ${rs.science} · Civ ${rs.civic} · Mil ${rs.military} · Com ${rs.commerce}`;
+    let researchText = `Sci ${rs.science} · Civ ${rs.civic} · Mil ${rs.military} · Com ${rs.commerce} · Cities ${sim.cityLimit}`;
     if (rs.current) {
-      researchText += ` · Researching ${rs.current} (${Math.floor(rs.progress * 100)}%)`;
+      researchText += ` · ${rs.current} ${Math.floor(rs.progress * 100)}%`;
     }
     this.researchEl.textContent = researchText;
   }
