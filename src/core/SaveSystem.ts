@@ -1,7 +1,8 @@
 import { Simulation, Unit, Building, ResourceNode, Resources, ResearchState } from './Simulation';
 import { EntityId } from './types';
+import { NationId } from '../data/nations';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY_PREFIX = 'warlords_save_';
 export const SAVE_SLOTS = 3;
 
@@ -15,6 +16,8 @@ export interface SaveSnapshot {
   popCap: number;
   cityLimit: number;
   time: number;
+  playerNation: NationId;
+  epochIndex: number;
   units: Unit[];
   buildings: Building[];
   resourceNodes: ResourceNode[];
@@ -43,7 +46,14 @@ export class SaveSystem {
       popCap: sim.popCap,
       cityLimit: sim.cityLimit,
       time: sim.time,
-      units: sim.getAllUnits().map((u) => ({ ...u, position: { ...u.position }, target: u.target ? { ...u.target } : undefined, carrying: u.carrying ? { ...u.carrying } : undefined })),
+      playerNation: sim.playerNation,
+      epochIndex: sim.epochIndex,
+      units: sim.getAllUnits().map((u) => ({
+        ...u,
+        position: { ...u.position },
+        target: u.target ? { ...u.target } : undefined,
+        carrying: u.carrying ? { ...u.carrying } : undefined,
+      })),
       buildings: sim.getAllBuildings().map((b) => ({ ...b, position: { ...b.position } })),
       resourceNodes: sim.getAllResourceNodes().map((n) => ({ ...n, position: { ...n.position } })),
       selected: [...sim.selected],
@@ -52,10 +62,6 @@ export class SaveSystem {
   }
 
   static apply(sim: Simulation, data: SaveSnapshot) {
-    if (data.version !== SAVE_VERSION) {
-      console.warn('Save version mismatch', data.version);
-    }
-
     sim.units.clear();
     sim.buildings.clear();
     sim.resourceNodes.clear();
@@ -66,6 +72,8 @@ export class SaveSystem {
     sim.popCap = data.popCap;
     sim.cityLimit = data.cityLimit;
     sim.time = data.time;
+    sim.playerNation = data.playerNation ?? 'rome';
+    sim.epochIndex = data.epochIndex ?? 0;
     sim.selectedBuildingId = data.selectedBuildingId;
 
     for (const u of data.units) {
