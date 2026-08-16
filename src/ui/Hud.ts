@@ -10,6 +10,8 @@ export class Hud {
   private epochEl: HTMLElement;
   private unitsEl: HTMLElement;
   private fpsEl: HTMLElement;
+  private marketEl: HTMLElement;
+  private marketRatesEl: HTMLElement;
 
   constructor() {
     this.root = document.getElementById('hud') as HTMLElement;
@@ -26,6 +28,11 @@ export class Hud {
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-units" id="hud-units"></div>
+      <div class="hud-market" id="hud-market" style="display:none; margin-top:6px; padding:6px; background:rgba(0,0,0,0.55); border-radius:4px;">
+        <div style="font-weight:600; margin-bottom:4px;">Market</div>
+        <div id="hud-market-rates"></div>
+        <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal</div>
+      </div>
       <div class="hud-help">
         A attack-move · Y tower · M market · U sell food · I buy metal · V citizen<br/>
         T infantry · R elite · edge-scroll · F1–F4 research · E epoch · Ctrl+0-9 groups
@@ -38,6 +45,8 @@ export class Hud {
     this.epochEl = document.getElementById('hud-epoch') as HTMLElement;
     this.unitsEl = document.getElementById('hud-units') as HTMLElement;
     this.fpsEl = document.getElementById('hud-fps') as HTMLElement;
+    this.marketEl = document.getElementById('hud-market') as HTMLElement;
+    this.marketRatesEl = document.getElementById('hud-market-rates') as HTMLElement;
   }
 
   setVisible(v: boolean) {
@@ -75,9 +84,21 @@ export class Hud {
       }
       const hp = `${Math.ceil(building.hp)}/${building.maxHp}`;
       this.selectionEl.textContent = `Building: ${building.type} (${hp})${extra}`;
+      if (building.type === 'market') {
+        this.marketEl.style.display = 'block';
+        const com = sim.research.commerce;
+        // Commerce improves rates (higher sell, lower buy)
+        const sellRate = 0.35 + com * 0.05; // wealth per food
+        const buyCost = Math.max(1.2, 2.0 - com * 0.12); // wealth per metal
+        this.marketRatesEl.innerHTML = `Sell food → ${sellRate.toFixed(2)} wealth each<br/>Buy metal ← ${buyCost.toFixed(2)} wealth each`;
+      } else {
+        this.marketEl.style.display = 'none';
+      }
     } else if (selected.length === 0) {
+      this.marketEl.style.display = 'none';
       this.selectionEl.textContent = 'No selection';
     } else if (selected.length === 1) {
+      this.marketEl.style.display = 'none';
       const u = selected[0];
       let extra = '';
       if (u.gatherTargetId) extra = ' · gathering';
@@ -87,6 +108,7 @@ export class Hud {
       if (u.underAttrition) extra += ' · ⚠ attrition';
       this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
+      this.marketEl.style.display = 'none';
       const attr = selected.filter((u) => u.underAttrition).length;
       this.selectionEl.textContent =
         `Selected: ${selected.length} units` + (attr ? ` (${attr} under attrition)` : '');

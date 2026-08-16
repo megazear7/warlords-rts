@@ -51,40 +51,35 @@ export class Renderer {
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 150;
-    sun.shadow.camera.left = -60;
-    sun.shadow.camera.right = 60;
-    sun.shadow.camera.top = 60;
-    sun.shadow.camera.bottom = -60;
+    sun.shadow.camera.far = 200;
+    sun.shadow.camera.left = -80;
+    sun.shadow.camera.right = 80;
+    sun.shadow.camera.top = 80;
+    sun.shadow.camera.bottom = -80;
     this.scene.add(sun);
 
-    this.scene.add(createTerrain(120));
+    createTerrain(this.scene);
 
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
     this.resourceMeshes = new ResourceMeshes(this.scene);
     this.territoryMeshes = new TerritoryMeshes(this.scene);
 
-    window.addEventListener('resize', () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      this.camera.aspect = w / h;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(w, h);
-    });
+    window.addEventListener('resize', () => this.onResize(container));
+  }
 
-    this.updateCamera();
+  private onResize(container: HTMLElement) {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
   }
 
   updateCamera() {
-    const x =
-      this.cameraTarget.x +
-      this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
+    const x = this.cameraTarget.x + this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
     const y = this.cameraTarget.y + this.cameraDistance * Math.cos(this.cameraPhi);
-    const z =
-      this.cameraTarget.z +
-      this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
-
+    const z = this.cameraTarget.z + this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.cameraTarget);
   }
@@ -93,7 +88,11 @@ export class Renderer {
     this.updateCamera();
 
     this.territoryMeshes.sync(sim);
-    this.unitMeshes.sync(sim.getAllUnits(), sim.selected);
+    // Fog of war: hide enemy units outside current player vision
+    const visibleUnits = sim.getAllUnits().filter(
+      (u) => u.nation === sim.playerNation || sim.isVisibleToPlayer(u.position)
+    );
+    this.unitMeshes.sync(visibleUnits, sim.selected);
     this.buildingMeshes.sync(sim.getAllBuildings(), sim.selectedBuildingId);
     this.resourceMeshes.sync(sim.getAllResourceNodes());
 
