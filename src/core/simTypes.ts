@@ -22,6 +22,8 @@ export interface Unit {
   /** Move while auto-engaging enemies in acquisition range */
   attackMove?: boolean;
   carrying?: { type: 'food' | 'timber' | 'metal'; amount: number };
+  /** Pathfinding waypoints; first element is the next immediate destination. */
+  waypoints?: Vec3[];
 }
 
 export interface Building {

@@ -15,6 +15,7 @@ import type {
   ResearchState,
 } from './simTypes';
 import { SimulationAI } from './simAI';
+import { NavGrid } from './pathfinding';
 import { executeTrade as _executeTrade, canTrade as _canTrade, type TradeResource } from '../data/market';
 export { getExchangeRates } from '../data/market';
 export type { TradeResource, ExchangeRates, TradeResult } from '../data/market';
@@ -88,6 +89,8 @@ export class Simulation {
   aiWaveTimer = 45;
   gameOver = false;
   private ai = new SimulationAI(this);
+  /** Navigation grid for unit pathfinding. */
+  readonly navGrid = new NavGrid();
 
   reset() {
     this.units.clear();
@@ -352,14 +355,16 @@ export class Simulation {
 
   addBuilding(type: string, nation: string, position: Vec3, hp: number): EntityId {
     const id = createEntityId();
-    this.buildings.set(id, {
+    const b: Building = {
       id,
       position: { ...position },
       type,
       nation,
       hp,
       maxHp: hp,
-    });
+    };
+    this.buildings.set(id, b);
+    this.navGrid.markBuilding(b);
     return id;
   }
 
@@ -456,8 +461,15 @@ export class Simulation {
         if (unit.target && distanceXZ(unit.position, unit.target) < 0.15) {
           unit.position.x = unit.target.x;
           unit.position.z = unit.target.z;
-          unit.target = undefined;
-          unit.attackMove = false;
+          // Advance to next waypoint, if any
+          if (unit.waypoints && unit.waypoints.length > 1) {
+            unit.waypoints.pop(); // discard current (stored in reverse)
+            unit.target = { ...unit.waypoints[unit.waypoints.length - 1] };
+          } else {
+            unit.waypoints = undefined;
+            unit.target = undefined;
+            unit.attackMove = false;
+          }
         }
       }
 
@@ -563,10 +575,12 @@ export class Simulation {
   ) {
     const dist = distanceXZ(unit.position, targetPos);
     if (dist > range) {
+      unit.waypoints = undefined;
       unit.target = { ...targetPos };
       this.moveToward(unit, targetPos, dt);
       return;
     }
+    unit.waypoints = undefined;
     unit.target = undefined;
     if (unit.attackTimer <= 0 && unit.attack > 0) {
       onHit();
@@ -587,6 +601,7 @@ export class Simulation {
         this.selectedBuildingId = null;
       }
     } else {
+      this.navGrid.clearBuilding(b);
       this.buildings.delete(b.id);
       if (this.selectedBuildingId === b.id) this.selectedBuildingId = null;
       for (const u of this.units.values()) {
@@ -826,11 +841,25 @@ export class Simulation {
   orderMove(unitId: EntityId, target: Vec3) {
     const unit = this.units.get(unitId);
     if (!unit) return;
-    unit.target = { ...target };
     unit.gatherTargetId = undefined;
     unit.attackTargetId = undefined;
     unit.attackBuildingId = undefined;
     unit.attackMove = false;
+    this._assignPath(unit, target);
+  }
+
+  /** Compute a path from unit's position to target and store as waypoints.
+   *  Falls back to straight-line (single waypoint) if pathfinding finds no route.
+   *  Waypoints are stored in reverse order; use Array.pop() to advance. */
+  private _assignPath(unit: Unit, target: Vec3) {
+    const waypoints = this.navGrid.findPath(unit.position, target);
+    if (waypoints.length > 0) {
+      unit.waypoints = waypoints;
+      unit.target = { ...waypoints[waypoints.length - 1] };
+    } else {
+      unit.waypoints = undefined;
+      unit.target = { ...target };
+    }
   }
 
   orderAttackMoveSelected(target: Vec3) {
@@ -843,11 +872,12 @@ export class Simulation {
       const unit = this.units.get(id);
       if (!unit) return;
       const o = offsets[i] || { x: 0, z: 0 };
-      unit.target = { x: target.x + o.x, y: 0, z: target.z + o.z };
+      const dest = { x: target.x + o.x, y: 0, z: target.z + o.z };
       unit.gatherTargetId = undefined;
       unit.attackTargetId = undefined;
       unit.attackBuildingId = undefined;
       unit.attackMove = true;
+      this._assignPath(unit, dest);
     });
   }
 
@@ -910,6 +940,7 @@ export class Simulation {
       unit.gatherTargetId = nodeId;
       unit.attackTargetId = undefined;
       unit.attackBuildingId = undefined;
+      unit.waypoints = undefined;
       unit.target = { ...node.position };
     }
   }
@@ -923,6 +954,7 @@ export class Simulation {
       unit.attackTargetId = targetUnitId;
       unit.attackBuildingId = undefined;
       unit.gatherTargetId = undefined;
+      unit.waypoints = undefined;
       unit.target = undefined;
     }
   }
@@ -936,6 +968,7 @@ export class Simulation {
       unit.attackBuildingId = buildingId;
       unit.attackTargetId = undefined;
       unit.gatherTargetId = undefined;
+      unit.waypoints = undefined;
       unit.target = undefined;
     }
   }
