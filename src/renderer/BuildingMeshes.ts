@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Building } from '../core/Simulation';
+import { NATIONS, NationId } from '../data/nations';
 
 export class BuildingMeshes {
   private group = new THREE.Group();
@@ -20,6 +21,12 @@ export class BuildingMeshes {
         mesh = this.createPlaceholder(b);
         this.meshes.set(b.id, mesh);
         this.group.add(mesh);
+      } else if (mesh.userData.nation !== b.nation) {
+        // Recreate after capture so colors update
+        this.group.remove(mesh);
+        mesh = this.createPlaceholder(b);
+        this.meshes.set(b.id, mesh);
+        this.group.add(mesh);
       }
 
       mesh.position.set(b.position.x, b.position.y, b.position.z);
@@ -28,6 +35,16 @@ export class BuildingMeshes {
       if (ring) {
         const mat = ring.material as THREE.MeshBasicMaterial;
         mat.opacity = selectedBuildingId === b.id ? 0.7 : 0;
+      }
+
+      const hpBar = mesh.userData.hpBar as THREE.Mesh | undefined;
+      if (hpBar) {
+        const ratio = Math.max(0, b.hp / b.maxHp);
+        hpBar.scale.x = ratio;
+        const mat = hpBar.material as THREE.MeshBasicMaterial;
+        mat.color.setHex(ratio > 0.5 ? 0x44ff66 : ratio > 0.25 ? 0xffaa22 : 0xff3333);
+        // Always show HP if damaged
+        hpBar.visible = ratio < 0.99 || selectedBuildingId === b.id;
       }
     }
 
@@ -41,17 +58,14 @@ export class BuildingMeshes {
 
   private createPlaceholder(b: Building): THREE.Object3D {
     const group = new THREE.Group();
-    const isEnemy = b.nation !== 'rome';
+    group.userData.nation = b.nation;
+    const nationId = b.nation as NationId;
+    const nationColor = NATIONS[nationId]?.color ?? 0x888888;
 
     if (b.type === 'city_center') {
-      const baseColor = isEnemy ? 0x5a6b45 : 0x8b7355;
-      const topColor = isEnemy ? 0x6a7b55 : 0x9c8466;
-      const roofColor = isEnemy ? 0x3d5a2a : 0x6b3a2a;
-      const flagColor = isEnemy ? 0x2d8b2d : 0xb22222;
-
       const base = new THREE.Mesh(
         new THREE.BoxGeometry(6, 3.5, 6),
-        new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.85 })
+        new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 0.85 })
       );
       base.position.y = 1.75;
       base.castShadow = true;
@@ -60,7 +74,7 @@ export class BuildingMeshes {
 
       const top = new THREE.Mesh(
         new THREE.BoxGeometry(4.2, 2.2, 4.2),
-        new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.8 })
+        new THREE.MeshStandardMaterial({ color: 0x9c8466, roughness: 0.8 })
       );
       top.position.y = 4.6;
       top.castShadow = true;
@@ -68,7 +82,7 @@ export class BuildingMeshes {
 
       const roof = new THREE.Mesh(
         new THREE.ConeGeometry(3.4, 1.8, 4),
-        new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.9 })
+        new THREE.MeshStandardMaterial({ color: 0x6b3a2a, roughness: 0.9 })
       );
       roof.position.y = 6.6;
       roof.rotation.y = Math.PI / 4;
@@ -84,7 +98,7 @@ export class BuildingMeshes {
 
       const flag = new THREE.Mesh(
         new THREE.PlaneGeometry(1.4, 0.9),
-        new THREE.MeshStandardMaterial({ color: flagColor, side: THREE.DoubleSide })
+        new THREE.MeshStandardMaterial({ color: nationColor, side: THREE.DoubleSide })
       );
       flag.position.set(2.5, 9.0, 1.8);
       group.add(flag);
@@ -96,7 +110,6 @@ export class BuildingMeshes {
       plot.position.y = 0.08;
       plot.receiveShadow = true;
       group.add(plot);
-
       for (let i = -1; i <= 1; i++) {
         const row = new THREE.Mesh(
           new THREE.BoxGeometry(4, 0.35, 0.6),
@@ -105,7 +118,6 @@ export class BuildingMeshes {
         row.position.set(0, 0.3, i * 1.3);
         group.add(row);
       }
-
       const shed = new THREE.Mesh(
         new THREE.BoxGeometry(1.8, 1.6, 1.6),
         new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.9 })
@@ -122,24 +134,9 @@ export class BuildingMeshes {
       base.castShadow = true;
       base.receiveShadow = true;
       group.add(base);
-
-      for (const [x, z] of [
-        [-2, -2],
-        [2, -2],
-        [-2, 2],
-        [2, 2],
-      ] as [number, number][]) {
-        const post = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.12, 0.12, 2.2, 6),
-          new THREE.MeshStandardMaterial({ color: 0x4a3a2a })
-        );
-        post.position.set(x, 1.1, z);
-        group.add(post);
-      }
-
       const banner = new THREE.Mesh(
         new THREE.PlaneGeometry(1.2, 1.6),
-        new THREE.MeshStandardMaterial({ color: 0x8b0000, side: THREE.DoubleSide })
+        new THREE.MeshStandardMaterial({ color: nationColor, side: THREE.DoubleSide })
       );
       banner.position.set(0, 3.5, -2.6);
       group.add(banner);
@@ -151,7 +148,6 @@ export class BuildingMeshes {
       base.position.y = 1.25;
       base.castShadow = true;
       group.add(base);
-
       const dome = new THREE.Mesh(
         new THREE.SphereGeometry(2.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
         new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.5, metalness: 0.2 })
@@ -159,20 +155,6 @@ export class BuildingMeshes {
       dome.position.y = 2.5;
       dome.castShadow = true;
       group.add(dome);
-
-      for (const [x, z] of [
-        [-1.8, -1.8],
-        [1.8, -1.8],
-        [-1.8, 1.8],
-        [1.8, 1.8],
-      ] as [number, number][]) {
-        const col = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.2, 0.22, 2.5, 8),
-          new THREE.MeshStandardMaterial({ color: 0xd4c4a8 })
-        );
-        col.position.set(x, 1.25, z);
-        group.add(col);
-      }
     } else {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(3, 2.5, 3),
@@ -197,8 +179,17 @@ export class BuildingMeshes {
     ring.position.y = 0.1;
     group.add(ring);
 
+    const hpBar = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.5, 0.18),
+      new THREE.MeshBasicMaterial({ color: 0x44ff66, depthWrite: false })
+    );
+    hpBar.position.y = b.type === 'city_center' ? 8.5 : 4.2;
+    hpBar.visible = false;
+    group.add(hpBar);
+
     group.userData.buildingId = b.id;
     group.userData.selectionRing = ring;
+    group.userData.hpBar = hpBar;
     return group;
   }
 }
