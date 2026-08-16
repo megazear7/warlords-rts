@@ -3,6 +3,7 @@ import { Simulation } from '../core/Simulation';
 import { createTerrain } from './Terrain';
 import { UnitMeshes } from './UnitMeshes';
 import { BuildingMeshes } from './BuildingMeshes';
+import { ResourceMeshes } from './ResourceMeshes';
 
 export class Renderer {
   readonly scene: THREE.Scene;
@@ -11,9 +12,9 @@ export class Renderer {
 
   private unitMeshes: UnitMeshes;
   private buildingMeshes: BuildingMeshes;
+  private resourceMeshes: ResourceMeshes;
   private terrain: THREE.Mesh;
 
-  // Camera control state (exposed for InputManager)
   cameraTarget = new THREE.Vector3(0, 0, 0);
   cameraDistance = 55;
   cameraTheta = Math.PI / 4;
@@ -41,7 +42,6 @@ export class Renderer {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
-    // Lighting
     const ambient = new THREE.AmbientLight(0xb0c4de, 0.55);
     this.scene.add(ambient);
 
@@ -57,15 +57,13 @@ export class Renderer {
     sun.shadow.camera.bottom = -60;
     this.scene.add(sun);
 
-    // Terrain
     this.terrain = createTerrain(120);
     this.scene.add(this.terrain);
 
-    // Mesh managers
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
+    this.resourceMeshes = new ResourceMeshes(this.scene);
 
-    // Handle resize
     window.addEventListener('resize', () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
@@ -95,6 +93,7 @@ export class Renderer {
 
     this.unitMeshes.sync(sim.getAllUnits(), sim.selected);
     this.buildingMeshes.sync(sim.getAllBuildings());
+    this.resourceMeshes.sync(sim.getAllResourceNodes());
 
     this.renderer.render(this.scene, this.camera);
   }
