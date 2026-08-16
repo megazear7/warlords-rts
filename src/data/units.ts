@@ -146,6 +146,19 @@ export const TRAINABLE_UNITS: UnitDef[] = [
     trainTime: 10,
     nations: ['gaul'],
   },
+  {
+    type: 'general',
+    name: 'General',
+    minEpoch: 1,
+    hp: 200,
+    speed: 4.2,
+    attack: 22,
+    range: 2.0,
+    cooldown: 1.0,
+    costFood: 120,
+    costMetal: 80,
+    trainTime: 20,
+  },
 ];
 
 export function getUnitDef(type: string): UnitDef | undefined {
