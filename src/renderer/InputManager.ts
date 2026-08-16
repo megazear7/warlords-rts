@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { Renderer } from './Renderer';
 import { Simulation } from '../core/Simulation';
 import { EntityId } from '../core/types';
+import type { Game } from '../Game';
 
 export class InputManager {
   private renderer: Renderer;
   private simulation: Simulation | null = null;
+  private game: Game | null = null;
 
   private isLeftDown = false;
   private isRightDown = false;
@@ -19,11 +21,12 @@ export class InputManager {
   private lastY = 0;
 
   private readonly DRAG_THRESHOLD = 5;
+  private panMul = 1;
+  private zoomMul = 1;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
   private selectionBoxEl: HTMLDivElement;
 
   constructor(renderer: Renderer) {
@@ -32,21 +35,18 @@ export class InputManager {
 
     this.selectionBoxEl = document.createElement('div');
     this.selectionBoxEl.style.cssText = `
-      position: absolute;
-      border: 1px solid #44ff88;
+      position: absolute; border: 1px solid #44ff88;
       background: rgba(68, 255, 136, 0.12);
-      pointer-events: none;
-      display: none;
-      z-index: 20;
+      pointer-events: none; display: none; z-index: 20;
     `;
     document.getElementById('app')?.appendChild(this.selectionBoxEl);
 
     el.addEventListener('contextmenu', (e) => e.preventDefault());
 
     el.addEventListener('mousedown', (e) => {
+      if (!this.isGameplay()) return;
       this.downX = this.lastX = e.clientX;
       this.downY = this.lastY = e.clientY;
-
       if (e.button === 0) {
         this.isLeftDown = true;
         this.isPanning = false;
@@ -59,47 +59,36 @@ export class InputManager {
     });
 
     window.addEventListener('mouseup', (e) => {
+      if (!this.isGameplay()) {
+        this.isLeftDown = this.isRightDown = false;
+        return;
+      }
       if (e.button === 0 && this.isLeftDown) {
-        const dx = e.clientX - this.downX;
-        const dy = e.clientY - this.downY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (this.isBoxSelecting) {
-          this.finishBoxSelect(e.clientX, e.clientY, e.shiftKey);
-        } else if (dist < this.DRAG_THRESHOLD) {
-          this.handleSelectClick(e.clientX, e.clientY, e.shiftKey);
-        }
-
+        const dist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
+        if (this.isBoxSelecting) this.finishBoxSelect(e.clientX, e.clientY, e.shiftKey);
+        else if (dist < this.DRAG_THRESHOLD) this.handleSelectClick(e.clientX, e.clientY, e.shiftKey);
         this.isLeftDown = false;
         this.isPanning = false;
         this.isBoxSelecting = false;
         this.selectionBoxEl.style.display = 'none';
       }
-
       if ((e.button === 2 || e.button === 1) && this.isRightDown) {
-        const dx = e.clientX - this.downX;
-        const dy = e.clientY - this.downY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < this.DRAG_THRESHOLD) {
-          this.handleRightClick(e.clientX, e.clientY);
-        }
+        const dist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
+        if (dist < this.DRAG_THRESHOLD) this.handleRightClick(e.clientX, e.clientY);
         this.isRightDown = false;
         this.isOrbiting = false;
       }
     });
 
     window.addEventListener('mousemove', (e) => {
+      if (!this.isGameplay()) return;
       const dx = e.clientX - this.lastX;
       const dy = e.clientY - this.lastY;
       this.lastX = e.clientX;
       this.lastY = e.clientY;
 
       if (this.isLeftDown) {
-        const totalDx = e.clientX - this.downX;
-        const totalDy = e.clientY - this.downY;
-        const totalDist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
-
+        const totalDist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
         if (totalDist > this.DRAG_THRESHOLD) {
           if (e.shiftKey) {
             this.isPanning = true;
@@ -110,17 +99,12 @@ export class InputManager {
             this.updateSelectionBox(e.clientX, e.clientY);
           }
         }
-
         if (this.isPanning) this.pan(dx, dy);
         if (this.isBoxSelecting) this.updateSelectionBox(e.clientX, e.clientY);
       }
-
       if (this.isRightDown) {
-        const totalDx = e.clientX - this.downX;
-        const totalDy = e.clientY - this.downY;
-        if (!this.isOrbiting && Math.sqrt(totalDx * totalDx + totalDy * totalDy) > this.DRAG_THRESHOLD) {
-          this.isOrbiting = true;
-        }
+        const totalDist = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
+        if (!this.isOrbiting && totalDist > this.DRAG_THRESHOLD) this.isOrbiting = true;
         if (this.isOrbiting) this.orbit(dx, dy);
       }
     });
@@ -128,6 +112,7 @@ export class InputManager {
     el.addEventListener(
       'wheel',
       (e) => {
+        if (!this.isGameplay()) return;
         e.preventDefault();
         this.zoom(e.deltaY);
       },
@@ -135,7 +120,13 @@ export class InputManager {
     );
 
     window.addEventListener('keydown', (e) => {
-      if (!this.simulation) return;
+      // Escape always available for pause/resume when in-game
+      if (e.code === 'Escape' && this.game) {
+        this.game.togglePause();
+        return;
+      }
+
+      if (!this.isGameplay() || !this.simulation) return;
       const sim = this.simulation;
 
       switch (e.code) {
@@ -153,6 +144,10 @@ export class InputManager {
           break;
         case 'KeyC':
           sim.tryFoundCity();
+          break;
+        case 'KeyS':
+          // Quick-save slot 1
+          this.game?.saveSlot(1);
           break;
         case 'Digit1':
           sim.tryResearch('science');
@@ -174,31 +169,41 @@ export class InputManager {
     this.simulation = sim;
   }
 
+  setGame(game: Game) {
+    this.game = game;
+  }
+
+  setPanSpeedMultiplier(m: number) {
+    this.panMul = m;
+  }
+
+  setZoomSpeedMultiplier(m: number) {
+    this.zoomMul = m;
+  }
+
+  private isGameplay(): boolean {
+    return this.game?.mode === 'playing';
+  }
+
   private updateSelectionBox(clientX: number, clientY: number) {
     const x = Math.min(this.downX, clientX);
     const y = Math.min(this.downY, clientY);
-    const w = Math.abs(clientX - this.downX);
-    const h = Math.abs(clientY - this.downY);
-
     this.selectionBoxEl.style.left = `${x}px`;
     this.selectionBoxEl.style.top = `${y}px`;
-    this.selectionBoxEl.style.width = `${w}px`;
-    this.selectionBoxEl.style.height = `${h}px`;
+    this.selectionBoxEl.style.width = `${Math.abs(clientX - this.downX)}px`;
+    this.selectionBoxEl.style.height = `${Math.abs(clientY - this.downY)}px`;
     this.selectionBoxEl.style.display = 'block';
   }
 
   private finishBoxSelect(clientX: number, clientY: number, additive: boolean) {
     if (!this.simulation) return;
-
     const x1 = Math.min(this.downX, clientX);
     const y1 = Math.min(this.downY, clientY);
     const x2 = Math.max(this.downX, clientX);
     const y2 = Math.max(this.downY, clientY);
-
     const selected: EntityId[] = [];
     const cam = this.renderer.camera;
     const rect = this.renderer.domElement.getBoundingClientRect();
-
     for (const unit of this.simulation.getAllUnits()) {
       if (unit.nation !== 'rome') continue;
       const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
@@ -207,33 +212,26 @@ export class InputManager {
       const sy = ((-pos.y + 1) / 2) * rect.height + rect.top;
       if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) selected.push(unit.id);
     }
-
     this.simulation.selectUnits(selected, additive);
   }
 
   private handleSelectClick(clientX: number, clientY: number, additive: boolean) {
     if (!this.simulation) return;
-
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
       this.simulation.selectUnit(hitUnitId, additive);
       return;
     }
-
     const hitBuildingId = this.raycastWithUserData(clientX, clientY, 'buildingId');
     if (hitBuildingId) {
       this.simulation.selectBuilding(hitBuildingId);
       return;
     }
-
     if (!additive) this.simulation.clearSelection();
   }
 
   private handleRightClick(clientX: number, clientY: number) {
-    if (!this.simulation) return;
-    if (this.simulation.selected.size === 0) return;
-
-    // Attack enemy unit if clicked
+    if (!this.simulation || this.simulation.selected.size === 0) return;
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
       const unit = this.simulation.units.get(hitUnitId);
@@ -242,34 +240,22 @@ export class InputManager {
         return;
       }
     }
-
-    // Gather resource
     const nodeId = this.raycastWithUserData(clientX, clientY, 'resourceNodeId');
     if (nodeId) {
       this.simulation.orderGatherSelected(nodeId);
       return;
     }
-
-    // Move
     const point = this.raycastGround(clientX, clientY);
-    if (point) {
-      this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
-    }
+    if (point) this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
   }
 
-  private raycastWithUserData(
-    clientX: number,
-    clientY: number,
-    key: string
-  ): EntityId | null {
+  private raycastWithUserData(clientX: number, clientY: number, key: string): EntityId | null {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
-
     const objs: THREE.Object3D[] = [];
     this.renderer.scene.traverse((obj) => {
       if (obj.userData?.[key]) objs.push(obj);
     });
-
     const hits = this.raycaster.intersectObjects(objs, true);
     if (hits.length > 0) {
       let obj: THREE.Object3D | null = hits[0].object;
@@ -285,8 +271,7 @@ export class InputManager {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
     const target = new THREE.Vector3();
-    const hit = this.raycaster.ray.intersectPlane(this.groundPlane, target);
-    return hit ? target : null;
+    return this.raycaster.ray.intersectPlane(this.groundPlane, target) ? target : null;
   }
 
   private updateMouseNDC(clientX: number, clientY: number) {
@@ -297,7 +282,7 @@ export class InputManager {
 
   private pan(dx: number, dy: number) {
     const r = this.renderer;
-    const speed = r.cameraDistance * 0.0018;
+    const speed = r.cameraDistance * 0.0018 * this.panMul;
     const forward = new THREE.Vector3();
     r.camera.getWorldDirection(forward);
     forward.y = 0;
@@ -317,7 +302,7 @@ export class InputManager {
   private zoom(deltaY: number) {
     const r = this.renderer;
     r.cameraDistance = THREE.MathUtils.clamp(
-      r.cameraDistance + deltaY * 0.04,
+      r.cameraDistance + deltaY * 0.04 * this.zoomMul,
       15,
       140
     );
