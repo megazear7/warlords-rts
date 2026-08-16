@@ -27,8 +27,8 @@ export class Hud {
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-units" id="hud-units"></div>
       <div class="hud-help">
-        Ctrl+0-9 control groups · F1–F4 research · E epoch · T infantry · R elite · Q scout · W wagon<br/>
-        Double-click unit = select all of type · Right-click enemy city to siege
+        V citizen (city) · T infantry · R elite · Q scout · W wagon · edge-scroll camera<br/>
+        Select barracks/city → right-click ground = rally · Ctrl+0-9 groups · F1–F4 research · E epoch
       </div>
     `;
 
@@ -70,6 +70,9 @@ export class Hud {
       if (building.productionTimer != null && building.productionTimer > 0) {
         extra = ` · training ${building.productionType} (${building.productionTimer.toFixed(1)}s)`;
       }
+      if (building.rallyPoint) {
+        extra += ` · rally (${building.rallyPoint.x.toFixed(0)}, ${building.rallyPoint.z.toFixed(0)})`;
+      }
       const hp = `${Math.ceil(building.hp)}/${building.maxHp}`;
       this.selectionEl.textContent = `Building: ${building.type} (${hp})${extra}`;
     } else if (selected.length === 0) {
@@ -95,7 +98,7 @@ export class Hud {
 
     const trainable = getTrainableForNation(sim.playerNation, sim.epochIndex);
     this.unitsEl.textContent =
-      'Barracks: ' +
+      'City: Citizen (V) · Barracks: ' +
       trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ') +
       ' · Wagon';
 
