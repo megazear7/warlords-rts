@@ -37,7 +37,7 @@ export class Hud {
         <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal · O sell timber · P buy timber</div>
       </div>
       <div class="hud-help">
-        A attack-move · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I/O/P trade · V citizen · G general<br/>
+        A attack-move · C found city (Civ) · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I/O/P trade · V citizen · G general<br/>
         T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
       </div>
     `;
@@ -65,7 +65,7 @@ export class Hud {
     const cityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation === sim.playerNation).length;
     const enemyCityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation !== sim.playerNation).length;
 
-    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.cityLimit} · enemy cities ${enemyCityCount}`;
+    this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.getPlayerCityLimit()} · enemy cities ${enemyCityCount}`;
 
     const nextEpoch = sim.getNextEpochDef();
     if (nextEpoch) {
