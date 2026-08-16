@@ -37,6 +37,8 @@ export interface Building {
   maxHp: number;
   productionTimer?: number;
   productionType?: string;
+  /** Where newly trained units walk after spawn */
+  rallyPoint?: Vec3;
 }
 
 export interface ResourceNode {
@@ -69,6 +71,8 @@ const ATTRITION_DPS = 4;
 const SUPPLY_RANGE = 14;
 const WAGON_LINK_RANGE = 18;
 const BUILDING_ATTACK_RANGE = 2.5;
+const CITIZEN_COST_FOOD = 50;
+const CITIZEN_TRAIN_TIME = 8;
 
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
@@ -96,12 +100,14 @@ export class Simulation {
 
   selected: Set<EntityId> = new Set();
   selectedBuildingId: EntityId | null = null;
-  /** Control groups 0-9 */
   controlGroups: Map<number, EntityId[]> = new Map();
 
   time = 0;
   popCap = 30;
   cityLimit = 2;
+
+  /** Fired when a unit finishes training (for SFX) */
+  lastTrainComplete = false;
 
   private aiTimer = 8;
 
@@ -126,6 +132,7 @@ export class Simulation {
     this.cityLimit = 2;
     this.epochIndex = 0;
     this.aiTimer = 8;
+    this.lastTrainComplete = false;
   }
 
   getBonuses() {
@@ -139,6 +146,13 @@ export class Simulation {
   getTerritoryRadius(): number {
     const b = this.getBonuses();
     return b.territoryRadius + this.research.civic * 2;
+  }
+
+  /** Commerce: higher max passive wealth income and slightly better city wealth */
+  getWealthIncomeRate(): number {
+    const base = 0.3;
+    const com = this.research.commerce;
+    return base * (1 + com * 0.25);
   }
 
   isInFriendlyTerritory(pos: Vec3, nation: string = this.playerNation): boolean {
@@ -282,6 +296,7 @@ export class Simulation {
 
   step(dt: number) {
     this.time += dt;
+    this.lastTrainComplete = false;
     const bonuses = this.getBonuses();
 
     for (const b of this.buildings.values()) {
@@ -289,7 +304,7 @@ export class Simulation {
       if (b.type === 'farm') this.resources.food += 1.2 * dt * bonuses.gatherMul;
       if (b.type === 'city_center') {
         this.resources.knowledge += 0.4 * dt;
-        this.resources.wealth += 0.3 * dt;
+        this.resources.wealth += this.getWealthIncomeRate() * dt;
       }
       if (b.type === 'library') this.resources.knowledge += 1.5 * dt;
       if (b.productionTimer != null && b.productionTimer > 0) {
@@ -525,11 +540,18 @@ export class Simulation {
     b.productionType = undefined;
     if (!type) return;
     if (this.countPlayerUnits() >= this.popCap) return;
-    this.spawnUnit(type, this.playerNation, {
+
+    const spawnPos = {
       x: b.position.x + 3 + (Math.random() - 0.5) * 4,
       y: 0,
       z: b.position.z + 3,
-    });
+    };
+    const id = this.spawnUnit(type, this.playerNation, spawnPos);
+    const unit = this.units.get(id);
+    if (unit && b.rallyPoint) {
+      unit.target = { ...b.rallyPoint };
+    }
+    this.lastTrainComplete = true;
   }
 
   private countPlayerUnits(): number {
@@ -561,8 +583,6 @@ export class Simulation {
     if (track === 'civic') this.cityLimit += 1;
   }
 
-  // ── Control groups ─────────────────────────────────────────
-
   setControlGroup(slot: number) {
     if (slot < 0 || slot > 9) return;
     this.controlGroups.set(slot, [...this.selected]);
@@ -578,7 +598,6 @@ export class Simulation {
     }
   }
 
-  /** Double-click: select all units of same type on screen-ish (all map for now) */
   selectAllOfType(type: string) {
     this.selected.clear();
     this.selectedBuildingId = null;
@@ -630,6 +649,15 @@ export class Simulation {
   getSelectedBuilding(): Building | null {
     if (!this.selectedBuildingId) return null;
     return this.buildings.get(this.selectedBuildingId) ?? null;
+  }
+
+  /** Right-click ground with a production building selected */
+  setRallyPoint(pos: Vec3): boolean {
+    const b = this.getSelectedBuilding();
+    if (!b) return false;
+    if (b.type !== 'barracks' && b.type !== 'city_center') return false;
+    b.rallyPoint = { ...pos };
+    return true;
   }
 
   orderMoveSelected(target: Vec3) {
@@ -740,7 +768,19 @@ export class Simulation {
     return true;
   }
 
-  /** Train a specific unit type from selected barracks */
+  /** Train citizen from selected city center */
+  tryTrainCitizen(): boolean {
+    const b = this.getSelectedBuilding();
+    if (!b || b.type !== 'city_center') return false;
+    if (b.productionTimer != null && b.productionTimer > 0) return false;
+    if (this.countPlayerUnits() >= this.popCap) return false;
+    if (this.resources.food < CITIZEN_COST_FOOD) return false;
+    this.resources.food -= CITIZEN_COST_FOOD;
+    b.productionType = 'citizen';
+    b.productionTimer = CITIZEN_TRAIN_TIME;
+    return true;
+  }
+
   tryTrainUnit(type: string): boolean {
     const b = this.getSelectedBuilding();
     if (!b || b.type !== 'barracks') return false;
@@ -774,7 +814,6 @@ export class Simulation {
   }
 
   tryTrainLegionary(): boolean {
-    // Primary infantry for current nation
     const list = getTrainableForNation(this.playerNation, this.epochIndex).filter(
       (u) => u.type !== 'scout' && u.minEpoch === 0
     );
@@ -787,7 +826,6 @@ export class Simulation {
       (u) => u.minEpoch >= 1
     );
     if (elites.length === 0) return false;
-    // Prefer highest epoch unit available
     elites.sort((a, b) => b.minEpoch - a.minEpoch);
     return this.tryTrainUnit(elites[0].type);
   }
