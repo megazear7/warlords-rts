@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "restore-sim": "node scripts/restore-simulation.cjs",
+    "predev": "node scripts/restore-simulation.cjs",
+    "prebuild": "node scripts/restore-simulation.cjs"
   },
   "dependencies": {
     "three": "^0.170.0"
