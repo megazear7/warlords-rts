@@ -2,13 +2,11 @@ import { Simulation } from '../core/Simulation';
 
 /**
  * Simple DOM-based heads-up display.
- * Shows resources, selection count, and controls help.
  */
 export class Hud {
   private root: HTMLElement;
   private resourcesEl: HTMLElement;
   private selectionEl: HTMLElement;
-  private helpEl: HTMLElement;
 
   constructor() {
     this.root = document.getElementById('hud') as HTMLElement;
@@ -22,15 +20,15 @@ export class Hud {
       <div class="hud-title"><strong>Warlords</strong> — Vertical Slice</div>
       <div class="hud-resources" id="hud-resources"></div>
       <div class="hud-selection" id="hud-selection"></div>
-      <div class="hud-help" id="hud-help">
-        Left-click: select · Shift+click: add · Right-click: move<br/>
-        Left-drag: pan · Right-drag: orbit · Wheel: zoom
+      <div class="hud-help">
+        Left-click / drag: select · Shift+drag: pan<br/>
+        Right-click unit/ground: move · Right-click resource: gather<br/>
+        <strong>F</strong> = Build Farm (needs citizens + 60 timber)
       </div>
     `;
 
     this.resourcesEl = document.getElementById('hud-resources') as HTMLElement;
     this.selectionEl = document.getElementById('hud-selection') as HTMLElement;
-    this.helpEl = document.getElementById('hud-help') as HTMLElement;
   }
 
   update(sim: Simulation) {
@@ -43,14 +41,17 @@ export class Hud {
       <span title="Knowledge">📚 ${Math.floor(r.knowledge)}</span>
     `;
 
-    const count = sim.selected.size;
-    if (count === 0) {
+    const selected = sim.getSelectedUnits();
+    if (selected.length === 0) {
       this.selectionEl.textContent = 'No units selected';
-    } else if (count === 1) {
-      const unit = sim.getSelectedUnits()[0];
-      this.selectionEl.textContent = `Selected: ${unit.type} (${unit.hp}/${unit.maxHp} HP)`;
+    } else if (selected.length === 1) {
+      const u = selected[0];
+      let extra = '';
+      if (u.gatherTargetId) extra = ' · gathering';
+      if (u.carrying) extra += ` · carrying ${Math.floor(u.carrying.amount)} ${u.carrying.type}`;
+      this.selectionEl.textContent = `Selected: ${u.type} (${u.hp}/${u.maxHp} HP)${extra}`;
     } else {
-      this.selectionEl.textContent = `Selected: ${count} units`;
+      this.selectionEl.textContent = `Selected: ${selected.length} units`;
     }
   }
 }
