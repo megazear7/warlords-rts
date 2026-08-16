@@ -3,7 +3,6 @@ import { Building } from '../core/Simulation';
 
 /**
  * Visual representation of buildings.
- * Phase 0: simple geometric city center placeholder.
  */
 export class BuildingMeshes {
   private group = new THREE.Group();
@@ -41,7 +40,6 @@ export class BuildingMeshes {
     const group = new THREE.Group();
 
     if (b.type === 'city_center') {
-      // Main keep
       const baseGeo = new THREE.BoxGeometry(6, 3.5, 6);
       const baseMat = new THREE.MeshStandardMaterial({
         color: 0x8b7355,
@@ -53,7 +51,6 @@ export class BuildingMeshes {
       base.receiveShadow = true;
       group.add(base);
 
-      // Upper section
       const topGeo = new THREE.BoxGeometry(4.2, 2.2, 4.2);
       const topMat = new THREE.MeshStandardMaterial({
         color: 0x9c8466,
@@ -64,7 +61,6 @@ export class BuildingMeshes {
       top.castShadow = true;
       group.add(top);
 
-      // Roof
       const roofGeo = new THREE.ConeGeometry(3.4, 1.8, 4);
       const roofMat = new THREE.MeshStandardMaterial({
         color: 0x6b3a2a,
@@ -76,14 +72,12 @@ export class BuildingMeshes {
       roof.castShadow = true;
       group.add(roof);
 
-      // Flag pole
       const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 3.5, 6);
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
       const pole = new THREE.Mesh(poleGeo, poleMat);
       pole.position.set(1.8, 8.2, 1.8);
       group.add(pole);
 
-      // Simple red flag (Rome)
       const flagGeo = new THREE.PlaneGeometry(1.4, 0.9);
       const flagMat = new THREE.MeshStandardMaterial({
         color: 0xb22222,
@@ -92,8 +86,35 @@ export class BuildingMeshes {
       const flag = new THREE.Mesh(flagGeo, flagMat);
       flag.position.set(2.5, 9.0, 1.8);
       group.add(flag);
+    } else if (b.type === 'farm') {
+      // Simple farm plot + shed
+      const plot = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 0.15, 5),
+        new THREE.MeshStandardMaterial({ color: 0x6b8f3a, roughness: 0.95 })
+      );
+      plot.position.y = 0.08;
+      plot.receiveShadow = true;
+      group.add(plot);
+
+      // Crop rows
+      for (let i = -1; i <= 1; i++) {
+        const row = new THREE.Mesh(
+          new THREE.BoxGeometry(4, 0.35, 0.6),
+          new THREE.MeshStandardMaterial({ color: 0x4a7c2a })
+        );
+        row.position.set(0, 0.3, i * 1.3);
+        group.add(row);
+      }
+
+      // Small shed
+      const shed = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 1.6, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.9 })
+      );
+      shed.position.set(2.2, 0.8, 2.0);
+      shed.castShadow = true;
+      group.add(shed);
     } else {
-      // Generic building fallback
       const geo = new THREE.BoxGeometry(3, 2.5, 3);
       const mat = new THREE.MeshStandardMaterial({ color: 0x7a6a55 });
       const mesh = new THREE.Mesh(geo, mat);
