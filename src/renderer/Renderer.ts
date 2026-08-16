@@ -16,8 +16,8 @@ export class Renderer {
   // Camera control state (exposed for InputManager)
   cameraTarget = new THREE.Vector3(0, 0, 0);
   cameraDistance = 55;
-  cameraTheta = Math.PI / 4; // horizontal angle
-  cameraPhi = 0.9; // vertical angle (radians from zenith-ish)
+  cameraTheta = Math.PI / 4;
+  cameraPhi = 0.9;
 
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -78,9 +78,13 @@ export class Renderer {
   }
 
   updateCamera() {
-    const x = this.cameraTarget.x + this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
+    const x =
+      this.cameraTarget.x +
+      this.cameraDistance * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta);
     const y = this.cameraTarget.y + this.cameraDistance * Math.cos(this.cameraPhi);
-    const z = this.cameraTarget.z + this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
+    const z =
+      this.cameraTarget.z +
+      this.cameraDistance * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta);
 
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.cameraTarget);
@@ -89,8 +93,7 @@ export class Renderer {
   render(sim: Simulation, _alpha: number) {
     this.updateCamera();
 
-    // Sync meshes to simulation state
-    this.unitMeshes.sync(sim.getAllUnits());
+    this.unitMeshes.sync(sim.getAllUnits(), sim.selected);
     this.buildingMeshes.sync(sim.getAllBuildings());
 
     this.renderer.render(this.scene, this.camera);
