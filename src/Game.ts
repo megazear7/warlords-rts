@@ -8,6 +8,7 @@ import { SaveSystem } from './core/SaveSystem';
 import { ProfileStore } from './core/Profile';
 import { GameSettings } from './core/Settings';
 import { NationId } from './data/nations';
+import { audio } from './audio/AudioManager';
 
 export type GameMode = 'menu' | 'playing' | 'paused' | 'ended';
 
@@ -18,6 +19,7 @@ export class Game {
   readonly hud: Hud;
   readonly ui: UIManager;
   readonly minimap: Minimap;
+  readonly audio = audio;
 
   private running = false;
   private lastTime = 0;
@@ -29,6 +31,11 @@ export class Game {
   private fpsFrames = 0;
   private fpsLast = 0;
   private fps = 0;
+  private prevUnitCount = 0;
+  private prevBuildingNations = new Map<string, string>();
+  private prevResearchBusy = false;
+  private prevEpoch = 0;
+  private attritionAlerted = false;
 
   constructor(container: HTMLElement) {
     this.simulation = new Simulation();
@@ -50,7 +57,19 @@ export class Game {
       onSettingsChanged: (s) => this.applySettings(s),
     });
 
+    // Unlock audio on first user gesture anywhere
+    const unlock = () => {
+      void audio.unlock();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+
     this.applySettings(this.ui.getSettings());
+    void audio.preloadFiles();
+    // Menu music starts after unlock; try immediately if already allowed
+    audio.playMusic('music_menu');
   }
 
   start() {
@@ -66,36 +85,49 @@ export class Game {
   }
 
   newGame(nation?: NationId) {
+    void audio.unlock();
+    audio.play('ui_confirm');
     const n = nation ?? this.ui.getProfile().preferredNation;
     this.simulation.reset();
     this.simulation.bootstrapDemoWorld(n);
     this.input.setSimulation(this.simulation);
     this.mode = 'playing';
     this.endRecorded = false;
+    this.attritionAlerted = false;
+    this.snapshotAudioState();
     this.ui.show('none');
     this.hud.setVisible(true);
     this.minimap.setVisible(true);
+    audio.setMusicDucked(false);
+    audio.playMusic('music_gameplay');
     this.ui.showToast(`Playing as ${n} — ${this.simulation.getCurrentEpochName()}`);
   }
 
   loadSlot(slot: number) {
+    void audio.unlock();
     const ok = SaveSystem.loadFromSlot(this.simulation, slot);
     if (!ok) {
+      audio.play('ui_error');
       this.ui.showToast('Failed to load save');
       return;
     }
+    audio.play('ui_confirm');
     this.input.setSimulation(this.simulation);
     this.mode = 'playing';
     this.endRecorded = false;
+    this.snapshotAudioState();
     this.ui.show('none');
     this.hud.setVisible(true);
     this.minimap.setVisible(true);
+    audio.setMusicDucked(false);
+    audio.playMusic('music_gameplay');
     this.ui.showToast(`Loaded slot ${slot}`);
   }
 
   saveSlot(slot: number) {
     if (this.mode !== 'playing' && this.mode !== 'paused') return;
     const ok = SaveSystem.saveToSlot(this.simulation, slot);
+    audio.play(ok ? 'ui_confirm' : 'ui_error');
     this.ui.showToast(ok ? `Saved to slot ${slot}` : 'Save failed');
     if (ok) this.ui.show('pause');
   }
@@ -106,6 +138,8 @@ export class Game {
     this.ui.show('pause');
     this.hud.setVisible(false);
     this.minimap.setVisible(false);
+    audio.setMusicDucked(true);
+    audio.play('ui_click');
   }
 
   resume() {
@@ -114,12 +148,17 @@ export class Game {
     this.ui.show('none');
     this.hud.setVisible(true);
     this.minimap.setVisible(true);
+    audio.setMusicDucked(false);
+    audio.play('ui_click');
   }
 
   quitToMenu() {
     this.mode = 'menu';
     this.hud.setVisible(false);
     this.minimap.setVisible(false);
+    audio.setMusicDucked(false);
+    audio.playMusic('music_menu');
+    audio.play('ui_click');
     this.ui.show('main');
   }
 
@@ -131,6 +170,7 @@ export class Game {
   applySettings(s: GameSettings) {
     this.input.setPanSpeedMultiplier(s.cameraPanSpeed);
     this.input.setZoomSpeedMultiplier(s.cameraZoomSpeed);
+    audio.applySettings(s);
     if (s.graphicsQuality === 'low') {
       this.renderer.renderer.setPixelRatio(1);
     } else if (s.graphicsQuality === 'medium') {
@@ -138,6 +178,67 @@ export class Game {
     } else {
       this.renderer.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     }
+  }
+
+  private snapshotAudioState() {
+    this.prevUnitCount = this.simulation.getAllUnits().filter((u) => u.hp > 0).length;
+    this.prevBuildingNations.clear();
+    for (const b of this.simulation.getAllBuildings()) {
+      this.prevBuildingNations.set(b.id, b.nation as string);
+    }
+    this.prevResearchBusy = !!this.simulation.research.current;
+    this.prevEpoch = this.simulation.epochIndex;
+  }
+
+  /** Infer gameplay SFX from state deltas (keeps Simulation pure of audio imports) */
+  private processAudioCues() {
+    const sim = this.simulation;
+    const units = sim.getAllUnits().filter((u) => u.hp > 0);
+    const unitCount = units.length;
+
+    // Deaths
+    if (unitCount < this.prevUnitCount) {
+      audio.play('combat_death');
+    }
+    this.prevUnitCount = unitCount;
+
+    // City capture / nation flip
+    for (const b of sim.getAllBuildings()) {
+      const prev = this.prevBuildingNations.get(b.id);
+      if (prev != null && prev !== b.nation) {
+        audio.play('city_capture');
+      }
+      this.prevBuildingNations.set(b.id, b.nation as string);
+    }
+
+    // Research finished
+    const busy = !!sim.research.current;
+    if (this.prevResearchBusy && !busy) {
+      audio.play('research_complete');
+    }
+    this.prevResearchBusy = busy;
+
+    // Epoch advanced
+    if (sim.epochIndex > this.prevEpoch) {
+      audio.play('epoch_advance');
+    }
+    this.prevEpoch = sim.epochIndex;
+
+    // Combat / siege hits (any unit currently striking)
+    for (const u of units) {
+      if (u.attackTimer > 0 && u.attackTimer < 0.08) {
+        if (u.attackBuildingId) audio.play('siege_hit');
+        else if (u.attackTargetId) audio.play('combat_hit');
+      }
+    }
+
+    // Attrition warning once while selected units suffer
+    const selectedAttrition = sim.getSelectedUnits().some((u) => u.underAttrition);
+    if (selectedAttrition && !this.attritionAlerted) {
+      audio.play('alert_attrition');
+      this.attritionAlerted = true;
+    }
+    if (!selectedAttrition) this.attritionAlerted = false;
   }
 
   private loop = (now: number) => {
@@ -160,6 +261,8 @@ export class Game {
         this.accumulator -= this.FIXED_DT;
       }
 
+      this.processAudioCues();
+
       const outcome = this.simulation.checkOutcome();
       if (outcome === 'victory' || outcome === 'defeat') {
         this.mode = 'ended';
@@ -168,6 +271,13 @@ export class Game {
         if (!this.endRecorded) {
           ProfileStore.recordGameEnd(outcome === 'victory', this.simulation.time);
           this.endRecorded = true;
+        }
+        if (outcome === 'victory') {
+          audio.play('victory');
+          audio.playMusic('music_victory');
+        } else {
+          audio.play('defeat');
+          audio.playMusic('music_defeat');
         }
         this.ui.show(outcome === 'victory' ? 'victory' : 'defeat');
       }
