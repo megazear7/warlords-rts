@@ -14,6 +14,7 @@ export class Hud {
   private fpsEl: HTMLElement;
   private marketEl: HTMLElement;
   private marketRatesEl: HTMLElement;
+  private controlGroupsEl: HTMLElement;
 
   constructor() {
     this.root = document.getElementById('hud') as HTMLElement;
@@ -28,6 +29,7 @@ export class Hud {
       <div class="hud-epoch" id="hud-epoch"></div>
       <div id="hud-epoch-next" style="font-size:12px; margin-bottom:2px; color:#ccc;"></div>
       <div class="hud-resources" id="hud-resources"></div>
+      <div id="hud-control-groups" style="font-size:12px; margin-bottom:2px; color:#aaa; letter-spacing:2px;"></div>
       <div class="hud-selection" id="hud-selection"></div>
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-units" id="hud-units"></div>
@@ -51,6 +53,7 @@ export class Hud {
     this.fpsEl = document.getElementById('hud-fps') as HTMLElement;
     this.marketEl = document.getElementById('hud-market') as HTMLElement;
     this.marketRatesEl = document.getElementById('hud-market-rates') as HTMLElement;
+    this.controlGroupsEl = document.getElementById('hud-control-groups') as HTMLElement;
   }
 
   setVisible(v: boolean) {
@@ -152,5 +155,19 @@ export class Hud {
       trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ');
 
     this.fpsEl.textContent = fps != null ? `· ${fps} FPS` : '';
+
+    const populated = sim.getPopulatedControlGroups();
+    if (populated.size > 0) {
+      const slots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+      this.controlGroupsEl.innerHTML = slots
+        .map((s) =>
+          populated.has(s)
+            ? `<span style="color:#44ff88;background:rgba(0,0,0,0.5);padding:0 3px;border-radius:2px">${s}</span>`
+            : `<span style="opacity:0.3">${s}</span>`
+        )
+        .join(' ');
+    } else {
+      this.controlGroupsEl.textContent = '';
+    }
   }
 }
