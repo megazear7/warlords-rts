@@ -1283,20 +1283,34 @@ export class Simulation {
     return this.tryTrainUnit('general');
   }
 
-  tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
+  /** Returns the cost to research the next level of a track. */
+  getResearchCost(level: number): { knowledge: number; wealth: number } {
+    return { knowledge: 40 + level * 30, wealth: 20 + level * 15 };
+  }
+
+  /**
+   * Returns null if research can proceed, or a human-readable reason why it cannot.
+   */
+  canTryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): string | null {
     const hasLibrary = [...this.buildings.values()].some(
       (b) => b.type === 'library' && b.nation === this.playerNation
     );
-    if (!hasLibrary) return false;
-    if (this.research.current) return false;
+    if (!hasLibrary) return 'No library built';
+    if (this.research.current) return `Already researching ${this.research.current}`;
     const level = this.research[track];
-    if (level >= 5) return false;
-    const costKnowledge = 40 + level * 30;
-    const costWealth = 20 + level * 15;
-    if (this.resources.knowledge < costKnowledge || this.resources.wealth < costWealth)
-      return false;
-    this.resources.knowledge -= costKnowledge;
-    this.resources.wealth -= costWealth;
+    if (level >= 5) return 'Max level reached';
+    const { knowledge, wealth } = this.getResearchCost(level);
+    if (this.resources.knowledge < knowledge) return `Need 📚 ${knowledge} (have ${Math.floor(this.resources.knowledge)})`;
+    if (this.resources.wealth < wealth) return `Need 💰 ${wealth} (have ${Math.floor(this.resources.wealth)})`;
+    return null;
+  }
+
+  tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
+    if (this.canTryResearch(track) !== null) return false;
+    const level = this.research[track];
+    const { knowledge, wealth } = this.getResearchCost(level);
+    this.resources.knowledge -= knowledge;
+    this.resources.wealth -= wealth;
     this.research.current = track;
     this.research.timeRemaining = this.researchTimeFor();
     this.research.progress = 0;
