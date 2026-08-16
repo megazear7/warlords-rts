@@ -239,6 +239,7 @@ export class InputManager {
 
   private handleRightClick(clientX: number, clientY: number) {
     if (!this.simulation || this.simulation.selected.size === 0) return;
+
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
       const unit = this.simulation.units.get(hitUnitId);
@@ -247,11 +248,23 @@ export class InputManager {
         return;
       }
     }
+
+    // Siege enemy buildings / capture cities
+    const hitBuildingId = this.raycastWithUserData(clientX, clientY, 'buildingId');
+    if (hitBuildingId) {
+      const b = this.simulation.buildings.get(hitBuildingId);
+      if (b && b.nation !== this.simulation.playerNation) {
+        this.simulation.orderAttackBuildingSelected(hitBuildingId);
+        return;
+      }
+    }
+
     const nodeId = this.raycastWithUserData(clientX, clientY, 'resourceNodeId');
     if (nodeId) {
       this.simulation.orderGatherSelected(nodeId);
       return;
     }
+
     const point = this.raycastGround(clientX, clientY);
     if (point) this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
   }
