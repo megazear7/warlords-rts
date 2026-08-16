@@ -2,6 +2,7 @@ import { SaveSystem, SAVE_SLOTS } from '../core/SaveSystem';
 import { SettingsStore, GameSettings, DEFAULT_SETTINGS } from '../core/Settings';
 import { ProfileStore, PlayerProfile } from '../core/Profile';
 import { NationId, NATIONS } from '../data/nations';
+import { audio } from '../audio/AudioManager';
 
 export type UIScreen =
   | 'main'
@@ -103,6 +104,7 @@ export class UIManager {
   showToast(message: string, durationMs = 2200) {
     this.toastEl.textContent = message;
     this.toastEl.className = 'toast-show';
+    audio.play('ui_toast');
     window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => {
       this.toastEl.className = '';
@@ -262,8 +264,14 @@ export class UIManager {
     `;
 
     this.root.querySelectorAll('[data-setting]').forEach((el) => {
-      el.addEventListener('change', () => this.readSettingsFromDOM());
-      el.addEventListener('input', () => this.readSettingsFromDOM());
+      el.addEventListener('change', () => {
+        this.readSettingsFromDOM();
+        audio.applySettings(this.settings);
+      });
+      el.addEventListener('input', () => {
+        this.readSettingsFromDOM();
+        audio.applySettings(this.settings);
+      });
     });
 
     this.bind(this.root, {
@@ -275,6 +283,7 @@ export class UIManager {
       reset: () => {
         this.settings = { ...DEFAULT_SETTINGS };
         SettingsStore.save(this.settings);
+        audio.applySettings(this.settings);
         this.renderSettings();
         this.showToast('Settings reset');
       },
@@ -398,7 +407,11 @@ export class UIManager {
   private bind(root: HTMLElement, actions: Record<string, () => void>) {
     root.querySelectorAll('[data-action]').forEach((btn) => {
       const key = (btn as HTMLElement).dataset.action!;
-      btn.addEventListener('click', () => actions[key]?.());
+      btn.addEventListener('click', () => {
+        void audio.unlock();
+        audio.play('ui_click');
+        actions[key]?.();
+      });
     });
   }
 }
