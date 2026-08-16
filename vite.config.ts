@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite';
-import path from 'path';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
   resolve: {
     alias: {
-      '@core': path.resolve(__dirname, './src/core'),
-      '@renderer': path.resolve(__dirname, './src/renderer'),
-      '@data': path.resolve(__dirname, './src/data'),
+      '@core': fileURLToPath(new URL('./src/core', import.meta.url)),
+      '@renderer': fileURLToPath(new URL('./src/renderer', import.meta.url)),
+      '@data': fileURLToPath(new URL('./src/data', import.meta.url)),
     },
   },
   server: {
