@@ -14,6 +14,9 @@ export class SimulationAI {
     const city = s.getEnemyCity();
     if (!city) return;
 
+    // Attempt epoch advance when affordable
+    s.tryAIAdvanceEpoch();
+
     // 1) Farms
     if (s.countBuildingsOf('farm', nation) < 2 && s.aiTimber >= 60) {
       s.aiTimber -= 60;
