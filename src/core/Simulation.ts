@@ -85,6 +85,7 @@ export class Simulation {
   // private aiPhase: 'build' | 'train' | 'attack' = 'build';
   aiTimer = 5;
   aiWaveTimer = 45;
+  gameOver = false;
   private ai = new SimulationAI(this);
 
   reset() {
@@ -119,6 +120,7 @@ export class Simulation {
     this.aiEpochIndex = 0;
     // this.aiPhase = 'build';
     this.lastTrainComplete = false;
+    this.gameOver = false;
   }
 
   getBonuses() {
@@ -265,6 +267,7 @@ export class Simulation {
   }
 
   checkOutcome(): 'victory' | 'defeat' | null {
+    if (this.gameOver) return null;
     let playerCities = 0;
     let enemyCities = 0;
     for (const b of this.buildings.values()) {
@@ -272,8 +275,8 @@ export class Simulation {
       if (b.nation === this.playerNation) playerCities++;
       else enemyCities++;
     }
-    if (playerCities === 0) return 'defeat';
-    if (enemyCities === 0) return 'victory';
+    if (playerCities === 0) { this.gameOver = true; return 'defeat'; }
+    if (enemyCities === 0) { this.gameOver = true; return 'victory'; }
     return null;
   }
 
@@ -471,7 +474,7 @@ export class Simulation {
 
     this.aiTimer -= dt;
     this.aiWaveTimer -= dt;
-    if (this.aiTimer <= 0) {
+    if (!this.gameOver && this.aiTimer <= 0) {
       this.aiTimer = 3.5 + Math.random() * 2.5;
       this.ai.run();
     }
