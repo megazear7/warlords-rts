@@ -2,6 +2,8 @@ import type { Simulation } from './Simulation';
 import type { Unit } from './simTypes';
 import { distanceXZ } from './math';
 import { executeTrade } from '../data/market';
+import { getTrainableForNation } from '../data/units';
+import type { NationId } from '../data/nations';
 
 /**
  * AI opponent logic — extracted so Simulation.ts stays smaller / pushable.
@@ -177,22 +179,56 @@ export class SimulationAI {
         s.aiMetal -= 80;
         barracks.productionType = 'general';
         barracks.productionTimer = 20;
-      } else if (army < 18 && s.aiFood >= 55 && s.aiMetal >= 10) {
-        // Guard: only train if not critically broke on metal
-        s.aiFood -= 55;
-        s.aiMetal -= 10;
-        barracks.productionType = 'enemy_warrior';
-        barracks.productionTimer = 11;
-        const pc = s.getPlayerCity();
-        if (pc) {
-          // Deterministic rally jitter: independent x/z offsets via different tick buckets
-          const jitterX = ((Math.floor(s.time) % 6) - 2.5) * 2;
-          const jitterZ = ((Math.floor(s.time + 3) % 6) - 2.5) * 2;
-          barracks.rallyPoint = {
-            x: pc.position.x + jitterX,
-            y: 0,
-            z: pc.position.z + jitterZ,
-          };
+      } else if (army < 18) {
+        // Prefer nation-unique unit ~30% of the time when gate is met and affordable;
+        // fall back to standard enemy_warrior otherwise.
+        const nationId = nation as NationId;
+        // getTrainableForNation already filters by minEpoch; keep only nation-exclusive units
+        // (those that carry a `nations` restriction — shared units have no `nations` field).
+        const uniqueCandidates = getTrainableForNation(nationId, s.aiEpochIndex).filter(
+          (u) => u.nations !== undefined
+        );
+        // Pick the highest-epoch unique available
+        uniqueCandidates.sort((a, b) => b.minEpoch - a.minEpoch);
+        const uniqueDef = uniqueCandidates[0];
+
+        // Deterministic tick bucket: prefer unique on every 3rd train cycle
+        const preferUnique =
+          uniqueDef != null &&
+          s.aiFood >= uniqueDef.costFood &&
+          s.aiMetal >= uniqueDef.costMetal &&
+          s.aiTimber >= (uniqueDef.costTimber ?? 0) &&
+          Math.floor(s.time / 10) % 3 === 0;
+
+        let didQueue = false;
+        if (preferUnique && uniqueDef) {
+          s.aiFood -= uniqueDef.costFood;
+          s.aiMetal -= uniqueDef.costMetal;
+          if (uniqueDef.costTimber) s.aiTimber -= uniqueDef.costTimber;
+          barracks.productionType = uniqueDef.type;
+          barracks.productionTimer = uniqueDef.trainTime;
+          didQueue = true;
+        } else if (s.aiFood >= 55 && s.aiMetal >= 10) {
+          // Guard: only train if not critically broke on metal
+          s.aiFood -= 55;
+          s.aiMetal -= 10;
+          barracks.productionType = 'enemy_warrior';
+          barracks.productionTimer = 11;
+          didQueue = true;
+        }
+
+        if (didQueue) {
+          const pc = s.getPlayerCity();
+          if (pc) {
+            // Deterministic rally jitter: independent x/z offsets via different tick buckets
+            const jitterX = ((Math.floor(s.time) % 6) - 2.5) * 2;
+            const jitterZ = ((Math.floor(s.time + 3) % 6) - 2.5) * 2;
+            barracks.rallyPoint = {
+              x: pc.position.x + jitterX,
+              y: 0,
+              z: pc.position.z + jitterZ,
+            };
+          }
         }
       }
     }
