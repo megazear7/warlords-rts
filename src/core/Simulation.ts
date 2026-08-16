@@ -21,7 +21,6 @@ export interface Building {
   nation: string;
   hp: number;
   maxHp: number;
-  /** Production queue remaining time (seconds) */
   productionTimer?: number;
   productionType?: string;
 }
@@ -47,15 +46,11 @@ export interface ResearchState {
   civic: number;
   military: number;
   commerce: number;
-  /** Currently researching track, if any */
   current?: 'science' | 'civic' | 'military' | 'commerce';
-  progress: number; // 0..1
+  progress: number;
   timeRemaining: number;
 }
 
-/**
- * Pure simulation core.
- */
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
   buildings: Map<EntityId, Building> = new Map();
@@ -65,7 +60,7 @@ export class Simulation {
     timber: 200,
     metal: 80,
     wealth: 100,
-    knowledge: 0,
+    knowledge: 50, // start with a little so first research is reachable
   };
 
   research: ResearchState = {
@@ -80,8 +75,6 @@ export class Simulation {
   selected: Set<EntityId> = new Set();
   selectedBuildingId: EntityId | null = null;
   time = 0;
-
-  /** Population soft cap (raised later by Military research) */
   popCap = 30;
 
   bootstrapDemoWorld() {
@@ -149,32 +142,31 @@ export class Simulation {
   step(dt: number) {
     this.time += dt;
 
-    // Passive farm income
     for (const b of this.buildings.values()) {
       if (b.type === 'farm') {
-        this.resources.food += 1.2 * dt; // ~1.2 food/sec per farm
+        this.resources.food += 1.2 * dt;
+      }
+      if (b.type === 'city_center') {
+        this.resources.knowledge += 0.4 * dt; // slow baseline knowledge
+        this.resources.wealth += 0.3 * dt;
+      }
+      if (b.type === 'library') {
+        this.resources.knowledge += 1.5 * dt; // main knowledge source
       }
 
-      // Production queues
       if (b.productionTimer != null && b.productionTimer > 0) {
         b.productionTimer -= dt;
-        if (b.productionTimer <= 0) {
-          this.finishProduction(b);
-        }
+        if (b.productionTimer <= 0) this.finishProduction(b);
       }
     }
 
-    // Research progress
     if (this.research.current && this.research.timeRemaining > 0) {
       this.research.timeRemaining -= dt;
       const total = this.researchTimeFor(this.research.current);
       this.research.progress = 1 - this.research.timeRemaining / total;
-      if (this.research.timeRemaining <= 0) {
-        this.completeResearch();
-      }
+      if (this.research.timeRemaining <= 0) this.completeResearch();
     }
 
-    // Units
     for (const unit of this.units.values()) {
       if (unit.type === 'citizen' && unit.gatherTargetId) {
         this.updateGathering(unit, dt);
@@ -235,9 +227,7 @@ export class Simulation {
       unit.carrying = undefined;
     }
 
-    if (node.amount <= 0) {
-      unit.gatherTargetId = undefined;
-    }
+    if (node.amount <= 0) unit.gatherTargetId = undefined;
   }
 
   private finishProduction(b: Building) {
@@ -245,7 +235,6 @@ export class Simulation {
     b.productionTimer = undefined;
     b.productionType = undefined;
     if (!type) return;
-
     if (this.units.size >= this.popCap) return;
 
     const id = createEntityId();
@@ -265,8 +254,7 @@ export class Simulation {
     });
   }
 
-  private researchTimeFor(track: string): number {
-    // Base 25s, reduced by science level
+  private researchTimeFor(_track: string): number {
     const scienceBonus = 1 - this.research.science * 0.08;
     return 25 * Math.max(0.5, scienceBonus);
   }
@@ -278,14 +266,8 @@ export class Simulation {
     this.research.current = undefined;
     this.research.progress = 0;
     this.research.timeRemaining = 0;
-
-    // Military research raises pop cap a bit
-    if (track === 'military') {
-      this.popCap += 10;
-    }
+    if (track === 'military') this.popCap += 10;
   }
-
-  // ── Selection ──────────────────────────────────────────────
 
   clearSelection() {
     this.selected.clear();
@@ -328,8 +310,6 @@ export class Simulation {
     if (!this.selectedBuildingId) return null;
     return this.buildings.get(this.selectedBuildingId) ?? null;
   }
-
-  // ── Commands ───────────────────────────────────────────────
 
   orderMoveSelected(target: Vec3) {
     for (const id of this.selected) this.orderMove(id, target);
@@ -406,7 +386,6 @@ export class Simulation {
     return this.placeBuildingNearCitizens('library', 80, 40);
   }
 
-  /** Train a legionary at the selected barracks */
   tryTrainLegionary(): boolean {
     const b = this.getSelectedBuilding();
     if (!b || b.type !== 'barracks') return false;
@@ -421,25 +400,20 @@ export class Simulation {
     this.resources.metal -= costMetal;
 
     b.productionType = 'legionary';
-    b.productionTimer = 12; // seconds
+    b.productionTimer = 12;
     return true;
   }
 
-  /** Start researching the next level of a track (requires Library) */
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
     const hasLibrary = [...this.buildings.values()].some((b) => b.type === 'library');
     if (!hasLibrary) return false;
     if (this.research.current) return false;
 
     const level = this.research[track];
-    if (level >= 5) return false; // cap for vertical slice
+    if (level >= 5) return false;
 
     const costKnowledge = 40 + level * 30;
     const costWealth = 20 + level * 15;
-    if (this.resources.knowledge < costKnowledge) {
-      // Allow starting with wealth→knowledge conversion later; for now require knowledge
-      // Bootstrap: city center slowly generates a bit of knowledge
-    }
     if (this.resources.knowledge < costKnowledge || this.resources.wealth < costWealth) {
       return false;
     }
