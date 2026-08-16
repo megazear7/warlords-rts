@@ -24,6 +24,22 @@ export class UnitMeshes {
       }
 
       mesh.position.set(unit.position.x, unit.position.y, unit.position.z);
+      // Subtle green pulse when under general aura
+      if ((unit as any).inAura) {
+        mesh.traverse((c: any) => {
+          if (c.isMesh && c.material && c.material.emissive) {
+            c.material.emissive.setHex(0x113311);
+            c.material.emissiveIntensity = 0.15;
+          }
+        });
+      } else {
+        mesh.traverse((c: any) => {
+          if (c.isMesh && c.material && c.material.emissive) {
+            c.material.emissive.setHex(0x000000);
+            c.material.emissiveIntensity = 0;
+          }
+        });
+      }
 
       const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
       if (ring) {
@@ -73,8 +89,35 @@ export class UnitMeshes {
         wheel2.position.z = -0.55;
         group.add(wheel2);
       }
+    } else if (unit.type === 'general') {
+      // General: larger body + standard/flag
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.38, 0.7, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a4a, roughness: 0.55, metalness: 0.2 })
+      );
+      body.position.y = 0.95;
+      body.castShadow = true;
+      group.add(body);
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xe8c4a0 })
+      );
+      head.position.y = 1.7;
+      group.add(head);
+      // Standard pole
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 2.2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5c4033 })
+      );
+      pole.position.set(0.45, 1.4, 0);
+      group.add(pole);
+      const flag = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.7, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0xc41e3a, side: THREE.DoubleSide })
+      );
+      flag.position.set(0.75, 2.2, 0);
+      group.add(flag);
     } else if (unit.type === 'cataphract' || unit.type === 'chariot') {
-      // Mounted / chariot silhouette
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(1.4, 0.6, 0.8),
         new THREE.MeshStandardMaterial({
