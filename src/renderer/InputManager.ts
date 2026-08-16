@@ -19,6 +19,8 @@ export class InputManager {
   private downY = 0;
   private lastX = 0;
   private lastY = 0;
+  private lastClickTime = 0;
+  private lastClickUnitType: string | null = null;
 
   private readonly DRAG_THRESHOLD = 5;
   private panMul = 1;
@@ -128,6 +130,20 @@ export class InputManager {
       if (!this.isGameplay() || !this.simulation) return;
       const sim = this.simulation;
 
+      // Control groups: Ctrl+0-9 set, 0-9 select
+      const digitMatch = e.code.match(/^Digit(\d)$/);
+      if (digitMatch) {
+        const slot = Number(digitMatch[1]);
+        if (e.ctrlKey || e.metaKey) {
+          sim.setControlGroup(slot);
+          this.game?.ui.showToast(`Control group ${slot} set`);
+          e.preventDefault();
+          return;
+        }
+        sim.selectControlGroup(slot);
+        return;
+      }
+
       switch (e.code) {
         case 'KeyF':
           sim.tryBuildFarm();
@@ -140,6 +156,12 @@ export class InputManager {
           break;
         case 'KeyT':
           sim.tryTrainLegionary();
+          break;
+        case 'KeyR':
+          if (!sim.tryTrainElite()) this.game?.ui.showToast('Elite unit locked (advance epoch)');
+          break;
+        case 'KeyQ':
+          sim.tryTrainScout();
           break;
         case 'KeyW':
           sim.tryTrainSupplyWagon();
@@ -154,18 +176,18 @@ export class InputManager {
           break;
         }
         case 'KeyS':
-          this.game?.saveSlot(1);
+          if (!e.ctrlKey) this.game?.saveSlot(1);
           break;
-        case 'Digit1':
+        case 'F1':
           sim.tryResearch('science');
           break;
-        case 'Digit2':
+        case 'F2':
           sim.tryResearch('civic');
           break;
-        case 'Digit3':
+        case 'F3':
           sim.tryResearch('military');
           break;
-        case 'Digit4':
+        case 'F4':
           sim.tryResearch('commerce');
           break;
       }
@@ -226,9 +248,25 @@ export class InputManager {
     if (!this.simulation) return;
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
+      const unit = this.simulation.units.get(hitUnitId);
+      const now = performance.now();
+      if (
+        unit &&
+        this.lastClickUnitType === unit.type &&
+        now - this.lastClickTime < 350 &&
+        !additive
+      ) {
+        this.simulation.selectAllOfType(unit.type);
+        this.lastClickTime = 0;
+        this.lastClickUnitType = null;
+        return;
+      }
+      this.lastClickTime = now;
+      this.lastClickUnitType = unit?.type ?? null;
       this.simulation.selectUnit(hitUnitId, additive);
       return;
     }
+    this.lastClickUnitType = null;
     const hitBuildingId = this.raycastWithUserData(clientX, clientY, 'buildingId');
     if (hitBuildingId) {
       this.simulation.selectBuilding(hitBuildingId);
@@ -249,7 +287,6 @@ export class InputManager {
       }
     }
 
-    // Siege enemy buildings / capture cities
     const hitBuildingId = this.raycastWithUserData(clientX, clientY, 'buildingId');
     if (hitBuildingId) {
       const b = this.simulation.buildings.get(hitBuildingId);
