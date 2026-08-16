@@ -89,6 +89,22 @@ export class NavGrid {
     return this.blocked[idx(cx, cz)] > 0;
   }
 
+  /** True when a building footprint can be placed on open cells within map bounds. */
+  canPlaceBuilding(type: string, position: Vec3): boolean {
+    const r = BUILDING_RADIUS[type] ?? DEFAULT_RADIUS;
+    const minCx = worldToCell(position.x - r);
+    const maxCx = worldToCell(position.x + r);
+    const minCz = worldToCell(position.z - r);
+    const maxCz = worldToCell(position.z + r);
+    if (minCx < 0 || minCz < 0 || maxCx >= GRID_N || maxCz >= GRID_N) return false;
+    for (let cz = minCz; cz <= maxCz; cz++) {
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        if (this.isBlocked(cx, cz)) return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Compute a path from `from` to `to` using A*.
    * Returns an array of world-space Vec3 waypoints (not including `from`),

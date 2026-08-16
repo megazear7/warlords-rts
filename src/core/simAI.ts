@@ -26,6 +26,12 @@ const ATTACK_THRESHOLD = 8;
 const AI_RESEARCH_COST = 40;
 /** Fixed priority order for AI research tracks */
 const RESEARCH_PRIORITY = ['military', 'civic', 'commerce', 'science'] as const;
+const CITY_FOUNDING_OFFSETS: Array<{ x: number; z: number }> = [
+  { x: 30, z: 0 },
+  { x: 0, z: 30 },
+  { x: -30, z: 0 },
+  { x: 0, z: -30 },
+];
 
 export class SimulationAI {
   constructor(private sim: Simulation) {}
@@ -147,6 +153,18 @@ export class SimulationAI {
         700
       );
       return;
+    }
+
+    // Found additional city centers once Civic allows it, using safe deterministic offsets.
+    const homeCity = [...s.buildings.values()].find(
+      (b) => b.type === 'city_center' && b.nation === nation
+    );
+    if (homeCity) {
+      for (const o of CITY_FOUNDING_OFFSETS) {
+        const site = { x: homeCity.position.x + o.x, y: 0, z: homeCity.position.z + o.z };
+        if (this.isThreatenedSite(site, nation)) continue;
+        if (s.tryAIFoundCity(site)) return;
+      }
     }
 
     // ── Unit census ────────────────────────────────────────────────────────
@@ -412,5 +430,13 @@ export class SimulationAI {
     if (s.aiMetal < 30 && s.aiWealth > 60) {
       executeTrade(aiRes, 'wealth', 'metal', 20, s.aiResearch.commerce, true);
     }
+  }
+
+  private isThreatenedSite(site: { x: number; y: number; z: number }, nation: string): boolean {
+    for (const u of this.sim.units.values()) {
+      if (u.nation === nation || u.hp <= 0) continue;
+      if (distanceXZ(site, u.position) < 16) return true;
+    }
+    return false;
   }
 }

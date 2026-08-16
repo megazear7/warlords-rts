@@ -24,6 +24,7 @@ Open the URL Vite prints (usually http://localhost:5173). The `predev` hook rest
 | **H** | Build wall (requires Military 2) |
 | **Y** | Build watchtower (Military 1) |
 | **M** | Build market (Commerce 1) |
+| **C** | Found city mode (requires Civic + selected citizen, then right-click ground) |
 | **G** | Train General |
 | **V** | Train citizen |
 | **U** / **I** | Market: sell food / buy metal |
@@ -45,6 +46,14 @@ Open the URL Vite prints (usually http://localhost:5173). The `predev` hook rest
 - Attack-move, unit separation, control groups
 - Save / load / main menu / settings / profile
 - Placeholder Web Audio (synth + SoundCatalog ready for OGG)
+
+## City founding rules
+
+- You start with 1 city and cities are always **captured, never destroyed**.
+- To found a city, select at least one citizen, press **C**, then right-click valid open ground.
+- Founding cost: **120 timber + 50 wealth**.
+- Civic gate formula: city `N` requires Civic `N-1` (2nd city needs Civic 1, 3rd needs Civic 2, etc.), with a hard cap of 5 owned cities.
+- Minimum distance between any two city centers: **25** world units.
 
 ## Architecture notes
 

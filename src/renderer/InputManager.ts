@@ -33,6 +33,8 @@ export class InputManager {
   private edgeScroll = true;
   /** A-key attack-move mode (next ground click) */
   private attackMoveMode = false;
+  /** C-key found-city mode (next ground right-click) */
+  private foundCityMode = false;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -220,7 +222,20 @@ export class InputManager {
           }
           break;
         case 'KeyC':
-          if (sim.tryFoundCity()) audio.play('build_place');
+          if (this.foundCityMode) {
+            this.foundCityMode = false;
+            this.game?.ui.showToast('Found-city mode canceled');
+            break;
+          }
+          {
+            const reason = sim.getCityFoundingPrecheckFailure();
+            if (reason) {
+              this.game?.ui.showToast(reason);
+            } else {
+              this.foundCityMode = true;
+              this.game?.ui.showToast('Found-city mode: right-click valid open ground');
+            }
+          }
           break;
         case 'KeyE': {
           const ok = sim.tryAdvanceEpoch();
@@ -353,6 +368,23 @@ export class InputManager {
 
   private handleRightClick(clientX: number, clientY: number) {
     if (!this.simulation) return;
+
+    if (this.foundCityMode) {
+      const point = this.raycastGround(clientX, clientY);
+      if (!point) return;
+      const position = { x: point.x, y: 0, z: point.z };
+      const reason = this.simulation.getCityFoundingPlacementFailure(position);
+      if (reason) {
+        this.game?.ui.showToast(reason);
+        return;
+      }
+      if (this.simulation.tryFoundCityAt(position)) {
+        this.foundCityMode = false;
+        audio.play('build_place');
+        this.game?.ui.showToast('City founded');
+      }
+      return;
+    }
 
     if (this.simulation.selected.size === 0 && this.simulation.selectedBuildingId) {
       const point = this.raycastGround(clientX, clientY);

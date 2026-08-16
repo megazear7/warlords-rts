@@ -38,6 +38,10 @@ const AURA_RADIUS = 12;
 const AURA_ATTACK_MUL = 1.25;
 const AURA_SPEED_MUL = 1.12;
 const EXPLORED_CELL = 8; // world units per fog cell
+const CITY_FOUNDING_COST_TIMBER = 120;
+const CITY_FOUNDING_COST_WEALTH = 50;
+const CITY_FOUNDING_MIN_DISTANCE = 25;
+const CITY_FOUNDING_MAX_CITIES = 5;
 
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
@@ -72,7 +76,7 @@ export class Simulation {
 
   time = 0;
   popCap = 30;
-  cityLimit = 2;
+  cityLimit = CITY_FOUNDING_MAX_CITIES;
 
   lastTrainComplete = false;
 
@@ -112,7 +116,7 @@ export class Simulation {
     };
     this.time = 0;
     this.popCap = 30;
-    this.cityLimit = 2;
+    this.cityLimit = CITY_FOUNDING_MAX_CITIES;
     this.epochIndex = 0;
     this.aiTimer = 5;
     this.aiWaveTimer = 45;
@@ -720,6 +724,14 @@ export class Simulation {
     return n;
   }
 
+  private countCitiesOf(nation: string): number {
+    let n = 0;
+    for (const b of this.buildings.values()) {
+      if (b.nation === nation && b.type === 'city_center') n++;
+    }
+    return n;
+  }
+
   private researchTimeFor(): number {
     return 25 * Math.max(0.5, 1 - this.research.science * 0.08);
   }
@@ -732,7 +744,6 @@ export class Simulation {
     this.research.progress = 0;
     this.research.timeRemaining = 0;
     if (track === 'military') this.applyEpochPopCap();
-    if (track === 'civic') this.cityLimit += 1;
   }
 
   setControlGroup(slot: number) {
@@ -1061,20 +1072,95 @@ export class Simulation {
     return this.executeTrade('wealth', 'metal', amount);
   }
 
-  tryFoundCity(): boolean {
-    if (this.countPlayerCities() >= this.cityLimit) return false;
+  private cityCivicRequirementForNext(currentCities: number): number {
+    return Math.max(0, currentCities);
+  }
+
+  getPlayerCityLimit(): number {
+    const owned = this.countPlayerCities();
+    const unlocked = Math.min(this.cityLimit, 1 + this.research.civic);
+    return Math.max(owned, unlocked);
+  }
+
+  getCityFoundingCost() {
+    return { timber: CITY_FOUNDING_COST_TIMBER, wealth: CITY_FOUNDING_COST_WEALTH };
+  }
+
+  getCityFoundingPrecheckFailure(): string | null {
     const citizens = this.getSelectedUnits().filter((u) => u.type === 'citizen');
-    if (citizens.length < 1) return false;
-    if (this.resources.timber < 120 || this.resources.wealth < 50) return false;
-    const c = citizens[0];
+    if (citizens.length < 1) return 'Select at least 1 citizen to found a city';
+    const cityCount = this.countPlayerCities();
+    const reason = this.cityFoundingValidation(
+      cityCount,
+      this.research.civic,
+      this.resources.timber,
+      this.resources.wealth
+    );
+    return reason;
+  }
+
+  getCityFoundingPlacementFailure(position: Vec3): string | null {
+    const cityCount = this.countPlayerCities();
+    return this.cityFoundingValidation(
+      cityCount,
+      this.research.civic,
+      this.resources.timber,
+      this.resources.wealth,
+      position
+    );
+  }
+
+  private cityFoundingValidation(
+    cityCount: number,
+    civicLevel: number,
+    timber: number,
+    wealth: number,
+    position?: Vec3
+  ): string | null {
+    if (cityCount >= this.cityLimit) return `City cap reached (${this.cityLimit})`;
+    const civicRequired = this.cityCivicRequirementForNext(cityCount);
+    if (civicLevel < civicRequired) return `Need Civic ${civicRequired} to found city #${cityCount + 1}`;
+    if (timber < CITY_FOUNDING_COST_TIMBER || wealth < CITY_FOUNDING_COST_WEALTH) {
+      return `Need ${CITY_FOUNDING_COST_TIMBER} timber and ${CITY_FOUNDING_COST_WEALTH} wealth`;
+    }
+    if (!position) return null;
+    if (!this.navGrid.canPlaceBuilding('city_center', position)) {
+      return 'Invalid ground (blocked or outside map)';
+    }
     for (const b of this.buildings.values()) {
-      if (b.type === 'city_center' && b.nation === this.playerNation) {
-        if (distanceXZ(c.position, b.position) < 25) return false;
+      if (b.type !== 'city_center') continue;
+      if (distanceXZ(position, b.position) < CITY_FOUNDING_MIN_DISTANCE) {
+        return `Too close to an existing city (min ${CITY_FOUNDING_MIN_DISTANCE})`;
       }
     }
-    this.resources.timber -= 120;
-    this.resources.wealth -= 50;
-    this.addBuilding('city_center', this.playerNation, { ...c.position }, 1800);
+    return null;
+  }
+
+  tryFoundCityAt(position: Vec3): boolean {
+    const citizens = this.getSelectedUnits().filter((u) => u.type === 'citizen');
+    if (citizens.length < 1) return false;
+    const reason = this.getCityFoundingPlacementFailure(position);
+    if (reason) return false;
+    this.resources.timber -= CITY_FOUNDING_COST_TIMBER;
+    this.resources.wealth -= CITY_FOUNDING_COST_WEALTH;
+    this.addBuilding('city_center', this.playerNation, { x: position.x, y: 0, z: position.z }, 1800);
+    return true;
+  }
+
+  tryAIFoundCity(position: Vec3): boolean {
+    const nation = this.enemyNation();
+    const cityCount = this.countCitiesOf(nation);
+    const reason = this.cityFoundingValidation(
+      cityCount,
+      this.aiResearch.civic,
+      this.aiTimber,
+      this.aiWealth,
+      position
+    );
+    if (reason) return false;
+    this.aiTimber -= CITY_FOUNDING_COST_TIMBER;
+    this.aiWealth -= CITY_FOUNDING_COST_WEALTH;
+    this.addBuilding('city_center', nation, { x: position.x, y: 0, z: position.z }, 1600);
     return true;
   }
 
