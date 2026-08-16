@@ -3,15 +3,6 @@ import { Renderer } from './Renderer';
 import { Simulation } from '../core/Simulation';
 import { EntityId } from '../core/types';
 
-/**
- * RTS-style input:
- * - Left click          → select unit
- * - Left drag (empty)   → box select OR pan (Shift held = pan)
- * - Right click         → move / gather
- * - Right drag          → orbit
- * - Wheel               → zoom
- * - F key               → build Farm (requires selected citizens + timber)
- */
 export class InputManager {
   private renderer: Renderer;
   private simulation: Simulation | null = null;
@@ -39,7 +30,6 @@ export class InputManager {
     this.renderer = renderer;
     const el = renderer.domElement;
 
-    // Visual selection rectangle
     this.selectionBoxEl = document.createElement('div');
     this.selectionBoxEl.style.cssText = `
       position: absolute;
@@ -111,7 +101,6 @@ export class InputManager {
         const totalDist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
 
         if (totalDist > this.DRAG_THRESHOLD) {
-          // Shift = force pan, otherwise box select
           if (e.shiftKey) {
             this.isPanning = true;
             this.isBoxSelecting = false;
@@ -145,14 +134,35 @@ export class InputManager {
       { passive: false }
     );
 
-    // Keyboard: F = build farm
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyF' && this.simulation) {
-        const ok = this.simulation.tryBuildFarm();
-        if (!ok) {
-          // Could show a toast later
-          console.log('Cannot build farm (need selected citizens + 60 timber)');
-        }
+      if (!this.simulation) return;
+      const sim = this.simulation;
+
+      switch (e.code) {
+        case 'KeyF':
+          sim.tryBuildFarm();
+          break;
+        case 'KeyB':
+          sim.tryBuildBarracks();
+          break;
+        case 'KeyL':
+          sim.tryBuildLibrary();
+          break;
+        case 'KeyT':
+          sim.tryTrainLegionary();
+          break;
+        case 'Digit1':
+          sim.tryResearch('science');
+          break;
+        case 'Digit2':
+          sim.tryResearch('civic');
+          break;
+        case 'Digit3':
+          sim.tryResearch('military');
+          break;
+        case 'Digit4':
+          sim.tryResearch('commerce');
+          break;
       }
     });
   }
@@ -160,8 +170,6 @@ export class InputManager {
   setSimulation(sim: Simulation) {
     this.simulation = sim;
   }
-
-  // ── Selection box ──────────────────────────────────────────
 
   private updateSelectionBox(clientX: number, clientY: number) {
     const x = Math.min(this.downX, clientX);
@@ -189,62 +197,39 @@ export class InputManager {
     const rect = this.renderer.domElement.getBoundingClientRect();
 
     for (const unit of this.simulation.getAllUnits()) {
-      // Project unit position to screen
       const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
       pos.project(cam);
-
       const sx = ((pos.x + 1) / 2) * rect.width + rect.left;
       const sy = ((-pos.y + 1) / 2) * rect.height + rect.top;
-
-      if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
-        selected.push(unit.id);
-      }
+      if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) selected.push(unit.id);
     }
 
     this.simulation.selectUnits(selected, additive);
   }
 
-  // ── Click selection ────────────────────────────────────────
-
   private handleSelectClick(clientX: number, clientY: number, additive: boolean) {
     if (!this.simulation) return;
 
-    const hitUnitId = this.raycastUnit(clientX, clientY);
+    const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
       this.simulation.selectUnit(hitUnitId, additive);
-    } else if (!additive) {
-      this.simulation.clearSelection();
+      return;
     }
-  }
 
-  private raycastUnit(clientX: number, clientY: number): EntityId | null {
-    this.updateMouseNDC(clientX, clientY);
-    this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
-
-    const unitObjects: THREE.Object3D[] = [];
-    this.renderer.scene.traverse((obj) => {
-      if (obj.userData?.unitId) unitObjects.push(obj);
-    });
-
-    const hits = this.raycaster.intersectObjects(unitObjects, true);
-    if (hits.length > 0) {
-      let obj: THREE.Object3D | null = hits[0].object;
-      while (obj) {
-        if (obj.userData?.unitId) return obj.userData.unitId as EntityId;
-        obj = obj.parent;
-      }
+    const hitBuildingId = this.raycastWithUserData(clientX, clientY, 'buildingId');
+    if (hitBuildingId) {
+      this.simulation.selectBuilding(hitBuildingId);
+      return;
     }
-    return null;
-  }
 
-  // ── Right-click: move or gather ────────────────────────────
+    if (!additive) this.simulation.clearSelection();
+  }
 
   private handleRightClick(clientX: number, clientY: number) {
     if (!this.simulation) return;
     if (this.simulation.selected.size === 0) return;
 
-    // Prefer resource node if clicked
-    const nodeId = this.raycastResourceNode(clientX, clientY);
+    const nodeId = this.raycastWithUserData(clientX, clientY, 'resourceNodeId');
     if (nodeId) {
       this.simulation.orderGatherSelected(nodeId);
       return;
@@ -256,20 +241,24 @@ export class InputManager {
     }
   }
 
-  private raycastResourceNode(clientX: number, clientY: number): EntityId | null {
+  private raycastWithUserData(
+    clientX: number,
+    clientY: number,
+    key: string
+  ): EntityId | null {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
 
     const objs: THREE.Object3D[] = [];
     this.renderer.scene.traverse((obj) => {
-      if (obj.userData?.resourceNodeId) objs.push(obj);
+      if (obj.userData?.[key]) objs.push(obj);
     });
 
     const hits = this.raycaster.intersectObjects(objs, true);
     if (hits.length > 0) {
       let obj: THREE.Object3D | null = hits[0].object;
       while (obj) {
-        if (obj.userData?.resourceNodeId) return obj.userData.resourceNodeId as EntityId;
+        if (obj.userData?.[key]) return obj.userData[key] as EntityId;
         obj = obj.parent;
       }
     }
@@ -279,7 +268,6 @@ export class InputManager {
   private raycastGround(clientX: number, clientY: number): THREE.Vector3 | null {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
-
     const target = new THREE.Vector3();
     const hit = this.raycaster.ray.intersectPlane(this.groundPlane, target);
     return hit ? target : null;
@@ -291,20 +279,15 @@ export class InputManager {
     this.mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   }
 
-  // ── Camera ─────────────────────────────────────────────────
-
   private pan(dx: number, dy: number) {
     const r = this.renderer;
     const speed = r.cameraDistance * 0.0018;
-
     const forward = new THREE.Vector3();
     r.camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
-
     const right = new THREE.Vector3();
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
     r.cameraTarget.addScaledVector(right, -dx * speed);
     r.cameraTarget.addScaledVector(forward, dy * speed);
   }
