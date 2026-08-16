@@ -37,7 +37,6 @@ export interface Building {
   maxHp: number;
   productionTimer?: number;
   productionType?: string;
-  /** Where newly trained units walk after spawn */
   rallyPoint?: Vec3;
 }
 
@@ -73,6 +72,8 @@ const WAGON_LINK_RANGE = 18;
 const BUILDING_ATTACK_RANGE = 2.5;
 const CITIZEN_COST_FOOD = 50;
 const CITIZEN_TRAIN_TIME = 8;
+const SEPARATION_RADIUS = 1.35;
+const SEPARATION_STRENGTH = 2.8;
 
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
@@ -106,10 +107,15 @@ export class Simulation {
   popCap = 30;
   cityLimit = 2;
 
-  /** Fired when a unit finishes training (for SFX) */
   lastTrainComplete = false;
 
-  private aiTimer = 8;
+  /** Abstract AI economy (not shown in HUD) */
+  private aiFood = 180;
+  private aiTimber = 160;
+  private aiMetal = 60;
+  private aiPhase: 'build' | 'train' | 'attack' = 'build';
+  private aiTimer = 5;
+  private aiWaveTimer = 45;
 
   reset() {
     this.units.clear();
@@ -131,7 +137,12 @@ export class Simulation {
     this.popCap = 30;
     this.cityLimit = 2;
     this.epochIndex = 0;
-    this.aiTimer = 8;
+    this.aiTimer = 5;
+    this.aiWaveTimer = 45;
+    this.aiFood = 180;
+    this.aiTimber = 160;
+    this.aiMetal = 60;
+    this.aiPhase = 'build';
     this.lastTrainComplete = false;
   }
 
@@ -148,7 +159,6 @@ export class Simulation {
     return b.territoryRadius + this.research.civic * 2;
   }
 
-  /** Commerce: higher max passive wealth income and slightly better city wealth */
   getWealthIncomeRate(): number {
     const base = 0.3;
     const com = this.research.commerce;
@@ -238,6 +248,9 @@ export class Simulation {
     this.spawnResourceNode('timber', { x: -22, y: 0, z: -8 }, 400);
     this.spawnResourceNode('timber', { x: 30, y: 0, z: 8 }, 350);
     this.spawnResourceNode('metal', { x: 12, y: 0, z: 28 }, 200);
+    // Enemy-side resources
+    this.spawnResourceNode('food', { x: 48, y: 0, z: -28 }, 250);
+    this.spawnResourceNode('timber', { x: 62, y: 0, z: -48 }, 300);
 
     this.applyEpochPopCap();
   }
@@ -299,19 +312,27 @@ export class Simulation {
     this.lastTrainComplete = false;
     const bonuses = this.getBonuses();
 
+    // Player economy + all production queues
     for (const b of this.buildings.values()) {
-      if (b.nation !== this.playerNation) continue;
-      if (b.type === 'farm') this.resources.food += 1.2 * dt * bonuses.gatherMul;
-      if (b.type === 'city_center') {
-        this.resources.knowledge += 0.4 * dt;
-        this.resources.wealth += this.getWealthIncomeRate() * dt;
+      if (b.nation === this.playerNation) {
+        if (b.type === 'farm') this.resources.food += 1.2 * dt * bonuses.gatherMul;
+        if (b.type === 'city_center') {
+          this.resources.knowledge += 0.4 * dt;
+          this.resources.wealth += this.getWealthIncomeRate() * dt;
+        }
+        if (b.type === 'library') this.resources.knowledge += 1.5 * dt;
       }
-      if (b.type === 'library') this.resources.knowledge += 1.5 * dt;
       if (b.productionTimer != null && b.productionTimer > 0) {
         b.productionTimer -= dt;
         if (b.productionTimer <= 0) this.finishProduction(b);
       }
     }
+
+    // Abstract AI income scales with farms / time
+    const aiFarms = this.countBuildingsOf('farm', this.enemyNation());
+    this.aiFood += (2.5 + aiFarms * 1.5) * dt;
+    this.aiTimber += 1.8 * dt;
+    this.aiMetal += 0.6 * dt;
 
     if (this.research.current && this.research.timeRemaining > 0) {
       this.research.timeRemaining -= dt * bonuses.researchSpeedMul;
@@ -323,6 +344,7 @@ export class Simulation {
     }
 
     const toRemoveUnits: EntityId[] = [];
+    const liveUnits = [...this.units.values()].filter((u) => u.hp > 0);
 
     for (const unit of this.units.values()) {
       unit.attackTimer = Math.max(0, unit.attackTimer - dt);
@@ -335,30 +357,23 @@ export class Simulation {
 
       if (unit.attackTargetId || unit.attackBuildingId) {
         this.updateCombat(unit, dt);
-        continue;
-      }
-      if (
+      } else if (
         unit.nation === this.playerNation &&
         unit.type === 'citizen' &&
         unit.gatherTargetId
       ) {
         this.updateGathering(unit, dt, bonuses.gatherMul);
-        continue;
+      } else if (unit.target) {
+        this.moveToward(unit, unit.target, dt);
+        if (unit.target && distanceXZ(unit.position, unit.target) < 0.15) {
+          unit.position.x = unit.target.x;
+          unit.position.z = unit.target.z;
+          unit.target = undefined;
+        }
       }
-      if (!unit.target) continue;
 
-      const dx = unit.target.x - unit.position.x;
-      const dz = unit.target.z - unit.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < 0.15) {
-        unit.position.x = unit.target.x;
-        unit.position.z = unit.target.z;
-        unit.target = undefined;
-        continue;
-      }
-      const step = Math.min(unit.speed * dt, dist);
-      unit.position.x += (dx / dist) * step;
-      unit.position.z += (dz / dist) * step;
+      // Soft separation so armies don't perfectly stack
+      this.applySeparation(unit, liveUnits, dt);
     }
 
     for (const id of toRemoveUnits) {
@@ -371,10 +386,40 @@ export class Simulation {
     }
 
     this.aiTimer -= dt;
+    this.aiWaveTimer -= dt;
     if (this.aiTimer <= 0) {
-      this.aiTimer = 4 + Math.random() * 3;
-      this.runSimpleAI();
+      this.aiTimer = 3.5 + Math.random() * 2.5;
+      this.runAI();
     }
+  }
+
+  private moveToward(unit: Unit, target: Vec3, dt: number) {
+    const dx = target.x - unit.position.x;
+    const dz = target.z - unit.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.001) return;
+    const step = Math.min(unit.speed * dt, dist);
+    unit.position.x += (dx / dist) * step;
+    unit.position.z += (dz / dist) * step;
+  }
+
+  private applySeparation(unit: Unit, others: Unit[], dt: number) {
+    let fx = 0;
+    let fz = 0;
+    let n = 0;
+    for (const o of others) {
+      if (o.id === unit.id || o.hp <= 0) continue;
+      const d = distanceXZ(unit.position, o.position);
+      if (d < 0.01 || d > SEPARATION_RADIUS) continue;
+      const push = (SEPARATION_RADIUS - d) / SEPARATION_RADIUS;
+      fx += ((unit.position.x - o.position.x) / d) * push;
+      fz += ((unit.position.z - o.position.z) / d) * push;
+      n++;
+      if (n > 8) break; // cap neighbors checked
+    }
+    if (n === 0) return;
+    unit.position.x += fx * SEPARATION_STRENGTH * dt;
+    unit.position.z += fz * SEPARATION_STRENGTH * dt;
   }
 
   private updateAttrition(unit: Unit, dt: number, resist: number) {
@@ -382,7 +427,9 @@ export class Simulation {
     const supplied = friendly || this.isSupplied(unit);
     unit.underAttrition = !supplied;
     if (supplied) return;
-    unit.hp -= ATTRITION_DPS * (1 - resist) * dt;
+    // AI gets slight attrition resist so they can siege
+    const r = unit.nation === this.playerNation ? resist : Math.max(resist, 0.15);
+    unit.hp -= ATTRITION_DPS * (1 - r) * dt;
   }
 
   private updateCombat(unit: Unit, dt: number) {
@@ -428,11 +475,7 @@ export class Simulation {
     const dist = distanceXZ(unit.position, targetPos);
     if (dist > range) {
       unit.target = { ...targetPos };
-      const dx = targetPos.x - unit.position.x;
-      const dz = targetPos.z - unit.position.z;
-      const step = Math.min(unit.speed * dt, dist);
-      unit.position.x += (dx / dist) * step;
-      unit.position.z += (dz / dist) * step;
+      this.moveToward(unit, targetPos, dt);
       return;
     }
     unit.target = undefined;
@@ -473,11 +516,7 @@ export class Simulation {
     const dist = distanceXZ(unit.position, node.position);
     if (dist > 2.2) {
       unit.target = { ...node.position };
-      const dx = node.position.x - unit.position.x;
-      const dz = node.position.z - unit.position.z;
-      const step = Math.min(unit.speed * dt, dist);
-      unit.position.x += (dx / dist) * step;
-      unit.position.z += (dz / dist) * step;
+      this.moveToward(unit, node.position, dt);
       return;
     }
     unit.target = undefined;
@@ -495,9 +534,139 @@ export class Simulation {
     if (node.amount <= 0) unit.gatherTargetId = undefined;
   }
 
-  private runSimpleAI() {
+  private enemyNation(): string {
+    for (const b of this.buildings.values()) {
+      if (b.type === 'city_center' && b.nation !== this.playerNation) return b.nation as string;
+    }
+    for (const u of this.units.values()) {
+      if (u.nation !== this.playerNation) return u.nation as string;
+    }
+    return 'gaul';
+  }
+
+  private countBuildingsOf(type: string, nation: string): number {
+    let n = 0;
+    for (const b of this.buildings.values()) {
+      if (b.type === type && b.nation === nation) n++;
+    }
+    return n;
+  }
+
+  private countUnitsOf(nation: string, type?: string): number {
+    let n = 0;
+    for (const u of this.units.values()) {
+      if (u.nation !== nation || u.hp <= 0) continue;
+      if (type && u.type !== type) continue;
+      n++;
+    }
+    return n;
+  }
+
+  private getEnemyCity(): Building | null {
+    for (const b of this.buildings.values()) {
+      if (b.type === 'city_center' && b.nation !== this.playerNation) return b;
+    }
+    return null;
+  }
+
+  private getPlayerCity(): Building | null {
+    for (const b of this.buildings.values()) {
+      if (b.type === 'city_center' && b.nation === this.playerNation) return b;
+    }
+    return null;
+  }
+
+  /** Stronger AI: economy → barracks → train → wave attacks with supply */
+  private runAI() {
+    const nation = this.enemyNation();
+    const city = this.getEnemyCity();
+    if (!city) return;
+
+    // 1) Build farm if none
+    if (this.countBuildingsOf('farm', nation) < 2 && this.aiTimber >= 60) {
+      this.aiTimber -= 60;
+      const ang = Math.random() * Math.PI * 2;
+      this.addBuilding(
+        'farm',
+        nation,
+        {
+          x: city.position.x + Math.cos(ang) * 10,
+          y: 0,
+          z: city.position.z + Math.sin(ang) * 10,
+        },
+        400
+      );
+      return;
+    }
+
+    // 2) Build barracks
+    if (this.countBuildingsOf('barracks', nation) < 1 && this.aiTimber >= 100) {
+      this.aiTimber -= 100;
+      this.addBuilding(
+        'barracks',
+        nation,
+        {
+          x: city.position.x - 8,
+          y: 0,
+          z: city.position.z + 6,
+        },
+        800
+      );
+      this.aiPhase = 'train';
+      return;
+    }
+
+    // 3) Train warriors from barracks
+    const barracks = [...this.buildings.values()].find(
+      (b) => b.type === 'barracks' && b.nation === nation
+    );
+    if (barracks && (barracks.productionTimer == null || barracks.productionTimer <= 0)) {
+      const army = this.countUnitsOf(nation);
+      if (army < 18 && this.aiFood >= 55) {
+        this.aiFood -= 55;
+        barracks.productionType = 'enemy_warrior';
+        barracks.productionTimer = 11;
+        // Rally toward player city for aggression
+        const pc = this.getPlayerCity();
+        if (pc) {
+          barracks.rallyPoint = {
+            x: pc.position.x + (Math.random() - 0.5) * 12,
+            y: 0,
+            z: pc.position.z + (Math.random() - 0.5) * 12,
+          };
+        }
+      }
+    }
+
+    // 4) Occasional supply wagon for deeper pushes
+    if (
+      this.countUnitsOf(nation, 'supply_wagon') < 1 &&
+      this.countUnitsOf(nation) >= 6 &&
+      this.aiTimber >= 40 &&
+      this.aiFood >= 30
+    ) {
+      this.aiTimber -= 40;
+      this.aiFood -= 30;
+      this.spawnUnit('supply_wagon', nation, {
+        x: city.position.x + 4,
+        y: 0,
+        z: city.position.z - 4,
+      });
+    }
+
+    // 5) Combat assignment every tick
+    this.aiAssignCombat(nation);
+
+    // 6) Periodic full wave toward player city
+    if (this.aiWaveTimer <= 0) {
+      this.aiWaveTimer = 35 + Math.random() * 20;
+      this.aiLaunchWave(nation);
+    }
+  }
+
+  private aiAssignCombat(nation: string) {
     const enemies = [...this.units.values()].filter(
-      (u) => u.nation !== this.playerNation && u.hp > 0 && u.type !== 'supply_wagon'
+      (u) => u.nation === nation && u.hp > 0 && u.type !== 'supply_wagon'
     );
     const players = [...this.units.values()].filter(
       (u) => u.nation === this.playerNation && u.hp > 0
@@ -507,7 +676,14 @@ export class Simulation {
     );
 
     for (const a of enemies) {
-      if (a.attackTargetId || a.attackBuildingId) continue;
+      if (a.attackTargetId || a.attackBuildingId) {
+        // Retarget if current target gone
+        if (a.attackTargetId && !this.units.get(a.attackTargetId)) a.attackTargetId = undefined;
+        if (a.attackBuildingId && !this.buildings.get(a.attackBuildingId))
+          a.attackBuildingId = undefined;
+        if (a.attackTargetId || a.attackBuildingId) continue;
+      }
+
       let nearestUnit: Unit | null = null;
       let bestU = Infinity;
       for (const p of players) {
@@ -517,10 +693,11 @@ export class Simulation {
           nearestUnit = p;
         }
       }
-      if (nearestUnit && bestU < 55) {
+      if (nearestUnit && bestU < 50) {
         a.attackTargetId = nearestUnit.id;
         continue;
       }
+
       let nearestCity: Building | null = null;
       let bestC = Infinity;
       for (const c of playerCities) {
@@ -530,7 +707,42 @@ export class Simulation {
           nearestCity = c;
         }
       }
-      if (nearestCity && bestC < 80) a.attackBuildingId = nearestCity.id;
+      if (nearestCity && bestC < 90) a.attackBuildingId = nearestCity.id;
+    }
+
+    // Supply wagons trail the army / city
+    const wagons = [...this.units.values()].filter(
+      (u) => u.nation === nation && u.type === 'supply_wagon' && u.hp > 0
+    );
+    const fighters = enemies.filter((u) => u.attackBuildingId || u.attackTargetId);
+    for (const w of wagons) {
+      if (fighters.length > 0) {
+        const lead = fighters[0];
+        w.target = {
+          x: lead.position.x - 4,
+          y: 0,
+          z: lead.position.z - 4,
+        };
+      } else {
+        const city = this.getEnemyCity();
+        if (city) w.target = { x: city.position.x + 5, y: 0, z: city.position.z };
+      }
+    }
+  }
+
+  private aiLaunchWave(nation: string) {
+    const pc = this.getPlayerCity();
+    if (!pc) return;
+    const fighters = [...this.units.values()].filter(
+      (u) =>
+        u.nation === nation &&
+        u.hp > 0 &&
+        u.type !== 'supply_wagon' &&
+        !u.attackTargetId &&
+        !u.attackBuildingId
+    );
+    for (const u of fighters) {
+      u.attackBuildingId = pc.id;
     }
   }
 
@@ -539,19 +751,21 @@ export class Simulation {
     b.productionTimer = undefined;
     b.productionType = undefined;
     if (!type) return;
-    if (this.countPlayerUnits() >= this.popCap) return;
+
+    const isPlayer = b.nation === this.playerNation;
+    if (isPlayer && this.countPlayerUnits() >= this.popCap) return;
 
     const spawnPos = {
       x: b.position.x + 3 + (Math.random() - 0.5) * 4,
       y: 0,
       z: b.position.z + 3,
     };
-    const id = this.spawnUnit(type, this.playerNation, spawnPos);
+    const id = this.spawnUnit(type, b.nation as string, spawnPos);
     const unit = this.units.get(id);
     if (unit && b.rallyPoint) {
       unit.target = { ...b.rallyPoint };
     }
-    this.lastTrainComplete = true;
+    if (isPlayer) this.lastTrainComplete = true;
   }
 
   private countPlayerUnits(): number {
@@ -651,7 +865,6 @@ export class Simulation {
     return this.buildings.get(this.selectedBuildingId) ?? null;
   }
 
-  /** Right-click ground with a production building selected */
   setRallyPoint(pos: Vec3): boolean {
     const b = this.getSelectedBuilding();
     if (!b) return false;
@@ -768,7 +981,6 @@ export class Simulation {
     return true;
   }
 
-  /** Train citizen from selected city center */
   tryTrainCitizen(): boolean {
     const b = this.getSelectedBuilding();
     if (!b || b.type !== 'city_center') return false;
