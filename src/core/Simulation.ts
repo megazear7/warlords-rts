@@ -45,9 +45,12 @@ export class Simulation {
     knowledge: 0,
   };
 
+  /** Currently selected unit ids (player selection) */
+  selected: Set<EntityId> = new Set();
+
   time = 0;
 
-  /** Create a small demo world for Phase 0 */
+  /** Create a small demo world for Phase 0/1 */
   bootstrapDemoWorld() {
     // Player capital (Rome for now)
     const capitalId = createEntityId();
@@ -60,7 +63,7 @@ export class Simulation {
       maxHp: 2000,
     });
 
-    // A few placeholder citizens / units near the capital
+    // A few placeholder citizens near the capital
     for (let i = 0; i < 5; i++) {
       const id = createEntityId();
       const angle = (i / 5) * Math.PI * 2;
@@ -116,7 +119,48 @@ export class Simulation {
     }
   }
 
-  /** Issue a move order to a unit (command pattern entry point) */
+  // ── Selection ──────────────────────────────────────────────
+
+  clearSelection() {
+    this.selected.clear();
+  }
+
+  selectUnit(id: EntityId, additive = false) {
+    if (!additive) this.selected.clear();
+    if (this.units.has(id)) {
+      this.selected.add(id);
+    }
+  }
+
+  selectUnits(ids: EntityId[], additive = false) {
+    if (!additive) this.selected.clear();
+    for (const id of ids) {
+      if (this.units.has(id)) this.selected.add(id);
+    }
+  }
+
+  isSelected(id: EntityId): boolean {
+    return this.selected.has(id);
+  }
+
+  getSelectedUnits(): Unit[] {
+    const result: Unit[] = [];
+    for (const id of this.selected) {
+      const u = this.units.get(id);
+      if (u) result.push(u);
+    }
+    return result;
+  }
+
+  // ── Commands ───────────────────────────────────────────────
+
+  /** Issue a move order to all currently selected units */
+  orderMoveSelected(target: Vec3) {
+    for (const id of this.selected) {
+      this.orderMove(id, target);
+    }
+  }
+
   orderMove(unitId: EntityId, target: Vec3) {
     const unit = this.units.get(unitId);
     if (!unit) return;
