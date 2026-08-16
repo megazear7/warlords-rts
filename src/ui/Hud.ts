@@ -34,7 +34,7 @@ export class Hud {
         <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal</div>
       </div>
       <div class="hud-help">
-        A attack-move · Y tower · M market · U/I trade · V citizen · G general<br/>
+        A attack-move · Y tower (Mil1) · M market (Com1) · U/I trade · V citizen · G general<br/>
         T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
       </div>
     `;
@@ -87,9 +87,8 @@ export class Hud {
       if (building.type === 'market') {
         this.marketEl.style.display = 'block';
         const com = sim.research.commerce;
-        // Commerce improves rates (higher sell, lower buy)
-        const sellRate = 0.35 + com * 0.05; // wealth per food
-        const buyCost = Math.max(1.2, 2.0 - com * 0.12); // wealth per metal
+        const sellRate = 0.35 + com * 0.05;
+        const buyCost = Math.max(1.2, 2.0 - com * 0.12);
         this.marketRatesEl.innerHTML = `Sell food → ${sellRate.toFixed(2)} wealth each<br/>Buy metal ← ${buyCost.toFixed(2)} wealth each`;
       } else {
         this.marketEl.style.display = 'none';
