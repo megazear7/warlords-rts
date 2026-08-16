@@ -6,6 +6,7 @@ import {
   getEpoch,
   NATIONS,
 } from '../data/nations';
+import { UNIT_STATS, getUnitDef, getTrainableForNation } from '../data/units';
 
 export interface Unit {
   id: EntityId;
@@ -64,17 +65,6 @@ export interface ResearchState {
   timeRemaining: number;
 }
 
-const UNIT_STATS: Record<
-  string,
-  { hp: number; speed: number; attack: number; range: number; cooldown: number }
-> = {
-  citizen: { hp: 40, speed: 4, attack: 3, range: 1.5, cooldown: 1.2 },
-  scout: { hp: 60, speed: 7, attack: 8, range: 2, cooldown: 1.0 },
-  legionary: { hp: 120, speed: 3.5, attack: 18, range: 1.8, cooldown: 1.1 },
-  supply_wagon: { hp: 80, speed: 3.2, attack: 0, range: 0, cooldown: 1 },
-  enemy_warrior: { hp: 90, speed: 3.8, attack: 14, range: 1.8, cooldown: 1.15 },
-};
-
 const ATTRITION_DPS = 4;
 const SUPPLY_RANGE = 14;
 const WAGON_LINK_RANGE = 18;
@@ -106,6 +96,9 @@ export class Simulation {
 
   selected: Set<EntityId> = new Set();
   selectedBuildingId: EntityId | null = null;
+  /** Control groups 0-9 */
+  controlGroups: Map<number, EntityId[]> = new Map();
+
   time = 0;
   popCap = 30;
   cityLimit = 2;
@@ -118,6 +111,7 @@ export class Simulation {
     this.resourceNodes.clear();
     this.selected.clear();
     this.selectedBuildingId = null;
+    this.controlGroups.clear();
     this.resources = { food: 200, timber: 200, metal: 80, wealth: 100, knowledge: 50 };
     this.research = {
       science: 0,
@@ -158,21 +152,17 @@ export class Simulation {
 
   isSupplied(unit: Unit): boolean {
     if (this.isInFriendlyTerritory(unit.position, unit.nation)) return true;
-
     const wagons = [...this.units.values()].filter(
       (u) => u.nation === unit.nation && u.type === 'supply_wagon' && u.hp > 0
     );
-
     const reachable = new Set<EntityId>();
     const queue: Unit[] = [];
-
     for (const w of wagons) {
       if (distanceXZ(unit.position, w.position) <= SUPPLY_RANGE) {
         queue.push(w);
         reachable.add(w.id);
       }
     }
-
     while (queue.length) {
       const w = queue.shift()!;
       if (this.isInFriendlyTerritory(w.position, unit.nation)) return true;
@@ -190,13 +180,11 @@ export class Simulation {
   checkOutcome(): 'victory' | 'defeat' | null {
     let playerCities = 0;
     let enemyCities = 0;
-
     for (const b of this.buildings.values()) {
       if (b.type !== 'city_center') continue;
       if (b.nation === this.playerNation) playerCities++;
       else enemyCities++;
     }
-
     if (playerCities === 0) return 'defeat';
     if (enemyCities === 0) return 'victory';
     return null;
@@ -205,9 +193,7 @@ export class Simulation {
   bootstrapDemoWorld(playerNation: NationId = 'rome') {
     this.playerNation = playerNation;
     this.epochIndex = 0;
-
-    const enemyNation: NationId =
-      playerNation === 'gaul' ? 'rome' : 'gaul';
+    const enemyNation: NationId = playerNation === 'gaul' ? 'rome' : 'gaul';
 
     this.addBuilding('city_center', playerNation, { x: 0, y: 0, z: 0 }, 2000);
 
@@ -243,8 +229,7 @@ export class Simulation {
   }
 
   private applyEpochPopCap() {
-    const base = 30 + this.research.military * 10;
-    this.popCap = base + this.getBonuses().popCapBonus;
+    this.popCap = 30 + this.research.military * 10 + this.getBonuses().popCapBonus;
   }
 
   private spawnUnit(type: string, nation: string, position: Vec3): EntityId {
@@ -323,7 +308,6 @@ export class Simulation {
     }
 
     const toRemoveUnits: EntityId[] = [];
-    const toRemoveBuildings: EntityId[] = [];
 
     for (const unit of this.units.values()) {
       unit.attackTimer = Math.max(0, unit.attackTimer - dt);
@@ -365,8 +349,11 @@ export class Simulation {
     for (const id of toRemoveUnits) {
       this.units.delete(id);
       this.selected.delete(id);
+      for (const [, ids] of this.controlGroups) {
+        const idx = ids.indexOf(id);
+        if (idx >= 0) ids.splice(idx, 1);
+      }
     }
-    for (const id of toRemoveBuildings) this.buildings.delete(id);
 
     this.aiTimer -= dt;
     if (this.aiTimer <= 0) {
@@ -384,14 +371,13 @@ export class Simulation {
   }
 
   private updateCombat(unit: Unit, dt: number) {
-    // Prefer unit target
     if (unit.attackTargetId) {
       const target = this.units.get(unit.attackTargetId);
       if (!target || target.hp <= 0 || target.nation === unit.nation) {
         unit.attackTargetId = undefined;
         return;
       }
-      this.chaseAndStrike(unit, target.position, target.attackRange, dt, () => {
+      this.chaseAndStrike(unit, target.position, unit.attackRange, dt, () => {
         target.hp -= unit.attack;
         if (
           !target.attackTargetId &&
@@ -404,7 +390,6 @@ export class Simulation {
       return;
     }
 
-    // Building siege
     if (unit.attackBuildingId) {
       const b = this.buildings.get(unit.attackBuildingId);
       if (!b || b.nation === unit.nation) {
@@ -412,7 +397,6 @@ export class Simulation {
         return;
       }
       this.chaseAndStrike(unit, b.position, BUILDING_ATTACK_RANGE, dt, () => {
-        // Siege deals reduced damage vs buildings
         b.hp -= unit.attack * 0.65;
         if (b.hp <= 0) this.resolveBuildingDestroyed(b, unit.nation);
       });
@@ -443,12 +427,10 @@ export class Simulation {
     }
   }
 
-  /** Cities are captured, not destroyed. Other buildings are removed. */
   private resolveBuildingDestroyed(b: Building, capturerNation: string) {
     if (b.type === 'city_center') {
       b.nation = capturerNation;
       b.hp = b.maxHp * 0.4;
-      // Clear siege orders targeting this building from former owners
       for (const u of this.units.values()) {
         if (u.attackBuildingId === b.id && u.nation !== capturerNation) {
           u.attackBuildingId = undefined;
@@ -511,8 +493,6 @@ export class Simulation {
 
     for (const a of enemies) {
       if (a.attackTargetId || a.attackBuildingId) continue;
-
-      // Prefer nearby player units
       let nearestUnit: Unit | null = null;
       let bestU = Infinity;
       for (const p of players) {
@@ -526,8 +506,6 @@ export class Simulation {
         a.attackTargetId = nearestUnit.id;
         continue;
       }
-
-      // Otherwise siege nearest player city
       let nearestCity: Building | null = null;
       let bestC = Infinity;
       for (const c of playerCities) {
@@ -537,9 +515,7 @@ export class Simulation {
           nearestCity = c;
         }
       }
-      if (nearestCity && bestC < 80) {
-        a.attackBuildingId = nearestCity.id;
-      }
+      if (nearestCity && bestC < 80) a.attackBuildingId = nearestCity.id;
     }
   }
 
@@ -571,8 +547,7 @@ export class Simulation {
   }
 
   private researchTimeFor(): number {
-    const scienceBonus = 1 - this.research.science * 0.08;
-    return 25 * Math.max(0.5, scienceBonus);
+    return 25 * Math.max(0.5, 1 - this.research.science * 0.08);
   }
 
   private completeResearch() {
@@ -584,6 +559,32 @@ export class Simulation {
     this.research.timeRemaining = 0;
     if (track === 'military') this.applyEpochPopCap();
     if (track === 'civic') this.cityLimit += 1;
+  }
+
+  // ── Control groups ─────────────────────────────────────────
+
+  setControlGroup(slot: number) {
+    if (slot < 0 || slot > 9) return;
+    this.controlGroups.set(slot, [...this.selected]);
+  }
+
+  selectControlGroup(slot: number) {
+    const ids = this.controlGroups.get(slot);
+    if (!ids || ids.length === 0) return;
+    this.selected.clear();
+    this.selectedBuildingId = null;
+    for (const id of ids) {
+      if (this.units.has(id)) this.selected.add(id);
+    }
+  }
+
+  /** Double-click: select all units of same type on screen-ish (all map for now) */
+  selectAllOfType(type: string) {
+    this.selected.clear();
+    this.selectedBuildingId = null;
+    for (const u of this.units.values()) {
+      if (u.nation === this.playerNation && u.type === type) this.selected.add(u.id);
+    }
   }
 
   clearSelection() {
@@ -739,30 +740,64 @@ export class Simulation {
     return true;
   }
 
-  tryTrainLegionary(): boolean {
+  /** Train a specific unit type from selected barracks */
+  tryTrainUnit(type: string): boolean {
     const b = this.getSelectedBuilding();
     if (!b || b.type !== 'barracks') return false;
     if (b.productionTimer != null && b.productionTimer > 0) return false;
     if (this.countPlayerUnits() >= this.popCap) return false;
-    if (this.resources.food < 60 || this.resources.metal < 20) return false;
-    this.resources.food -= 60;
-    this.resources.metal -= 20;
-    b.productionType = 'legionary';
-    b.productionTimer = 12;
+
+    if (type === 'supply_wagon') {
+      if (this.resources.timber < 40 || this.resources.food < 30) return false;
+      this.resources.timber -= 40;
+      this.resources.food -= 30;
+      b.productionType = 'supply_wagon';
+      b.productionTimer = 10;
+      return true;
+    }
+
+    const def = getUnitDef(type);
+    if (!def) return false;
+    if (def.minEpoch > this.epochIndex) return false;
+    if (def.nations && !def.nations.includes(this.playerNation)) return false;
+    if (this.resources.food < def.costFood) return false;
+    if (this.resources.metal < def.costMetal) return false;
+    if ((def.costTimber ?? 0) > this.resources.timber) return false;
+
+    this.resources.food -= def.costFood;
+    this.resources.metal -= def.costMetal;
+    if (def.costTimber) this.resources.timber -= def.costTimber;
+
+    b.productionType = type;
+    b.productionTimer = def.trainTime;
     return true;
   }
 
+  tryTrainLegionary(): boolean {
+    // Primary infantry for current nation
+    const list = getTrainableForNation(this.playerNation, this.epochIndex).filter(
+      (u) => u.type !== 'scout' && u.minEpoch === 0
+    );
+    const primary = list[0]?.type ?? 'legionary';
+    return this.tryTrainUnit(primary);
+  }
+
+  tryTrainElite(): boolean {
+    const elites = getTrainableForNation(this.playerNation, this.epochIndex).filter(
+      (u) => u.minEpoch >= 1
+    );
+    if (elites.length === 0) return false;
+    // Prefer highest epoch unit available
+    elites.sort((a, b) => b.minEpoch - a.minEpoch);
+    return this.tryTrainUnit(elites[0].type);
+  }
+
   tryTrainSupplyWagon(): boolean {
-    const b = this.getSelectedBuilding();
-    if (!b || b.type !== 'barracks') return false;
-    if (b.productionTimer != null && b.productionTimer > 0) return false;
-    if (this.countPlayerUnits() >= this.popCap) return false;
-    if (this.resources.timber < 40 || this.resources.food < 30) return false;
-    this.resources.timber -= 40;
-    this.resources.food -= 30;
-    b.productionType = 'supply_wagon';
-    b.productionTimer = 10;
-    return true;
+    return this.tryTrainUnit('supply_wagon');
+  }
+
+  tryTrainScout(): boolean {
+    return this.tryTrainUnit('scout');
   }
 
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
