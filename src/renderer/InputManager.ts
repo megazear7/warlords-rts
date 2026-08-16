@@ -180,12 +180,20 @@ export class InputManager {
           else this.game?.ui.showToast('Need Military research 2+ · select citizens · 40 timber, 20 wealth');
           break;
         case 'KeyU':
-          if (sim.trySellFood(50)) this.game?.ui.showToast('Sold 50 food for wealth');
-          else this.game?.ui.showToast('Need market + 50 food');
+          if (sim.executeTrade('food', 'wealth', 50)) this.game?.ui.showToast('Sold 50 food for wealth');
+          else this.game?.ui.showToast(sim.checkTrade('food', 'wealth', 50) ?? 'Trade failed');
           break;
         case 'KeyI':
-          if (sim.tryBuyMetal(20)) this.game?.ui.showToast('Bought 20 metal');
-          else this.game?.ui.showToast('Need market + wealth');
+          if (sim.executeTrade('wealth', 'metal', 20)) this.game?.ui.showToast('Bought 20 metal');
+          else this.game?.ui.showToast(sim.checkTrade('wealth', 'metal', 20) ?? 'Trade failed');
+          break;
+        case 'KeyO':
+          if (sim.executeTrade('timber', 'wealth', 50)) this.game?.ui.showToast('Sold 50 timber for wealth');
+          else this.game?.ui.showToast(sim.checkTrade('timber', 'wealth', 50) ?? 'Trade failed');
+          break;
+        case 'KeyP':
+          if (sim.executeTrade('wealth', 'timber', 50)) this.game?.ui.showToast('Bought 50 timber');
+          else this.game?.ui.showToast(sim.checkTrade('wealth', 'timber', 50) ?? 'Trade failed');
           break;
         case 'KeyV':
           if (!sim.tryTrainCitizen()) {
