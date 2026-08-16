@@ -4,6 +4,7 @@ import { createTerrain } from './Terrain';
 import { UnitMeshes } from './UnitMeshes';
 import { BuildingMeshes } from './BuildingMeshes';
 import { ResourceMeshes } from './ResourceMeshes';
+import { TerritoryMeshes } from './TerritoryMeshes';
 
 export class Renderer {
   readonly scene: THREE.Scene;
@@ -13,6 +14,7 @@ export class Renderer {
   private unitMeshes: UnitMeshes;
   private buildingMeshes: BuildingMeshes;
   private resourceMeshes: ResourceMeshes;
+  private territoryMeshes: TerritoryMeshes;
 
   cameraTarget = new THREE.Vector3(0, 0, 0);
   cameraDistance = 55;
@@ -61,6 +63,7 @@ export class Renderer {
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
     this.resourceMeshes = new ResourceMeshes(this.scene);
+    this.territoryMeshes = new TerritoryMeshes(this.scene);
 
     window.addEventListener('resize', () => {
       const w = container.clientWidth;
@@ -89,6 +92,7 @@ export class Renderer {
   render(sim: Simulation, _alpha: number) {
     this.updateCamera();
 
+    this.territoryMeshes.sync(sim);
     this.unitMeshes.sync(sim.getAllUnits(), sim.selected);
     this.buildingMeshes.sync(sim.getAllBuildings(), sim.selectedBuildingId);
     this.resourceMeshes.sync(sim.getAllResourceNodes());
