@@ -151,6 +151,9 @@ export class InputManager {
         case 'KeyT':
           sim.tryTrainLegionary();
           break;
+        case 'KeyC':
+          sim.tryFoundCity();
+          break;
         case 'Digit1':
           sim.tryResearch('science');
           break;
@@ -197,6 +200,7 @@ export class InputManager {
     const rect = this.renderer.domElement.getBoundingClientRect();
 
     for (const unit of this.simulation.getAllUnits()) {
+      if (unit.nation !== 'rome') continue;
       const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
       pos.project(cam);
       const sx = ((pos.x + 1) / 2) * rect.width + rect.left;
@@ -229,12 +233,24 @@ export class InputManager {
     if (!this.simulation) return;
     if (this.simulation.selected.size === 0) return;
 
+    // Attack enemy unit if clicked
+    const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
+    if (hitUnitId) {
+      const unit = this.simulation.units.get(hitUnitId);
+      if (unit && unit.nation !== 'rome') {
+        this.simulation.orderAttackSelected(hitUnitId);
+        return;
+      }
+    }
+
+    // Gather resource
     const nodeId = this.raycastWithUserData(clientX, clientY, 'resourceNodeId');
     if (nodeId) {
       this.simulation.orderGatherSelected(nodeId);
       return;
     }
 
+    // Move
     const point = this.raycastGround(clientX, clientY);
     if (point) {
       this.simulation.orderMoveSelected({ x: point.x, y: 0, z: point.z });
