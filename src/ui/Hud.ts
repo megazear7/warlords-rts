@@ -27,8 +27,8 @@ export class Hud {
       <div class="hud-research" id="hud-research"></div>
       <div class="hud-units" id="hud-units"></div>
       <div class="hud-help">
-        V citizen (city) · T infantry · R elite · Q scout · W wagon · edge-scroll camera<br/>
-        Select barracks/city → right-click ground = rally · Ctrl+0-9 groups · F1–F4 research · E epoch
+        A attack-move · Y tower · M market · U sell food · I buy metal · V citizen<br/>
+        T infantry · R elite · edge-scroll · F1–F4 research · E epoch · Ctrl+0-9 groups
       </div>
     `;
 
@@ -83,6 +83,7 @@ export class Hud {
       if (u.gatherTargetId) extra = ' · gathering';
       if (u.attackTargetId) extra = ' · attacking';
       if (u.attackBuildingId) extra = ' · sieging';
+      if (u.attackMove) extra += ' · attack-move';
       if (u.underAttrition) extra += ' · ⚠ attrition';
       this.selectionEl.textContent = `Selected: ${u.type} (${Math.ceil(u.hp)}/${u.maxHp} HP)${extra}`;
     } else {
@@ -98,9 +99,8 @@ export class Hud {
 
     const trainable = getTrainableForNation(sim.playerNation, sim.epochIndex);
     this.unitsEl.textContent =
-      'City: Citizen (V) · Barracks: ' +
-      trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ') +
-      ' · Wagon';
+      'V citizen · Y tower · M market · U/I trade · Barracks: ' +
+      trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ');
 
     this.fpsEl.textContent = fps != null ? `· ${fps} FPS` : '';
   }
