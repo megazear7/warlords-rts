@@ -1,6 +1,7 @@
 import { Simulation } from './core/Simulation';
 import { Renderer } from './renderer/Renderer';
 import { InputManager } from './renderer/InputManager';
+import { Hud } from './ui/Hud';
 
 /**
  * Top-level orchestrator.
@@ -11,6 +12,7 @@ export class Game {
   readonly simulation: Simulation;
   readonly renderer: Renderer;
   readonly input: InputManager;
+  readonly hud: Hud;
 
   private running = false;
   private lastTime = 0;
@@ -23,8 +25,10 @@ export class Game {
     this.simulation = new Simulation();
     this.renderer = new Renderer(container);
     this.input = new InputManager(this.renderer);
+    this.input.setSimulation(this.simulation);
+    this.hud = new Hud();
 
-    // Initial world setup (Phase 0 placeholder)
+    // Initial world setup
     this.simulation.bootstrapDemoWorld();
   }
 
@@ -42,19 +46,18 @@ export class Game {
   private loop = (now: number) => {
     if (!this.running) return;
 
-    const frameTime = Math.min((now - this.lastTime) / 1000, 0.25); // clamp large spikes
+    const frameTime = Math.min((now - this.lastTime) / 1000, 0.25);
     this.lastTime = now;
     this.accumulator += frameTime;
 
-    // Fixed-step simulation
     while (this.accumulator >= this.FIXED_DT) {
       this.simulation.step(this.FIXED_DT);
       this.accumulator -= this.FIXED_DT;
     }
 
-    // Render with interpolation alpha
     const alpha = this.accumulator / this.FIXED_DT;
     this.renderer.render(this.simulation, alpha);
+    this.hud.update(this.simulation);
 
     requestAnimationFrame(this.loop);
   };
