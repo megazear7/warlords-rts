@@ -6,11 +6,16 @@ export interface Unit {
   position: Vec3;
   target?: Vec3;
   gatherTargetId?: EntityId;
+  attackTargetId?: EntityId;
   speed: number;
   nation: string;
   type: string;
   hp: number;
   maxHp: number;
+  attack: number;
+  attackRange: number;
+  attackCooldown: number;
+  attackTimer: number;
   carrying?: { type: 'food' | 'timber' | 'metal'; amount: number };
 }
 
@@ -51,6 +56,13 @@ export interface ResearchState {
   timeRemaining: number;
 }
 
+const UNIT_STATS: Record<string, { hp: number; speed: number; attack: number; range: number; cooldown: number }> = {
+  citizen: { hp: 40, speed: 4, attack: 3, range: 1.5, cooldown: 1.2 },
+  scout: { hp: 60, speed: 7, attack: 8, range: 2, cooldown: 1.0 },
+  legionary: { hp: 120, speed: 3.5, attack: 18, range: 1.8, cooldown: 1.1 },
+  enemy_warrior: { hp: 90, speed: 3.8, attack: 14, range: 1.8, cooldown: 1.15 },
+};
+
 export class Simulation {
   units: Map<EntityId, Unit> = new Map();
   buildings: Map<EntityId, Building> = new Map();
@@ -60,7 +72,7 @@ export class Simulation {
     timber: 200,
     metal: 80,
     wealth: 100,
-    knowledge: 50, // start with a little so first research is reachable
+    knowledge: 50,
   };
 
   research: ResearchState = {
@@ -76,52 +88,79 @@ export class Simulation {
   selectedBuildingId: EntityId | null = null;
   time = 0;
   popCap = 30;
+  cityLimit = 2; // raised by civic research later
+
+  /** Simple AI timer */
+  private aiTimer = 8;
 
   bootstrapDemoWorld() {
-    const capitalId = createEntityId();
-    this.buildings.set(capitalId, {
-      id: capitalId,
-      position: { x: 0, y: 0, z: 0 },
-      type: 'city_center',
-      nation: 'rome',
-      hp: 2000,
-      maxHp: 2000,
-    });
+    // Player capital
+    this.addBuilding('city_center', 'rome', { x: 0, y: 0, z: 0 }, 2000);
 
     for (let i = 0; i < 5; i++) {
-      const id = createEntityId();
       const angle = (i / 5) * Math.PI * 2;
-      this.units.set(id, {
-        id,
-        position: {
-          x: Math.cos(angle) * 8,
-          y: 0,
-          z: Math.sin(angle) * 8,
-        },
-        speed: 4,
-        nation: 'rome',
-        type: 'citizen',
-        hp: 40,
-        maxHp: 40,
+      this.spawnUnit('citizen', 'rome', {
+        x: Math.cos(angle) * 8,
+        y: 0,
+        z: Math.sin(angle) * 8,
       });
     }
+    this.spawnUnit('scout', 'rome', { x: 25, y: 0, z: 15 });
 
-    const scoutId = createEntityId();
-    this.units.set(scoutId, {
-      id: scoutId,
-      position: { x: 25, y: 0, z: 15 },
-      speed: 7,
-      nation: 'rome',
-      type: 'scout',
-      hp: 60,
-      maxHp: 60,
-    });
+    // Enemy camp (Gauls-ish) to the north-east
+    this.addBuilding('city_center', 'gaul', { x: 55, y: 0, z: -40 }, 1500);
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      this.spawnUnit('enemy_warrior', 'gaul', {
+        x: 55 + Math.cos(angle) * 6,
+        y: 0,
+        z: -40 + Math.sin(angle) * 6,
+      });
+    }
+    this.spawnUnit('enemy_warrior', 'gaul', { x: 48, y: 0, z: -32 });
 
     this.spawnResourceNode('food', { x: 18, y: 0, z: -12 }, 300);
     this.spawnResourceNode('food', { x: -15, y: 0, z: 20 }, 280);
     this.spawnResourceNode('timber', { x: -22, y: 0, z: -8 }, 400);
     this.spawnResourceNode('timber', { x: 30, y: 0, z: 8 }, 350);
     this.spawnResourceNode('metal', { x: 12, y: 0, z: 28 }, 200);
+  }
+
+  private spawnUnit(type: string, nation: string, position: Vec3): EntityId {
+    const stats = UNIT_STATS[type] ?? UNIT_STATS.citizen;
+    const id = createEntityId();
+    this.units.set(id, {
+      id,
+      position: { ...position },
+      speed: stats.speed,
+      nation,
+      type,
+      hp: stats.hp,
+      maxHp: stats.hp,
+      attack: stats.attack,
+      attackRange: stats.range,
+      attackCooldown: stats.cooldown,
+      attackTimer: 0,
+    });
+    return id;
+  }
+
+  private addBuilding(
+    type: string,
+    nation: string,
+    position: Vec3,
+    hp: number
+  ): EntityId {
+    const id = createEntityId();
+    this.buildings.set(id, {
+      id,
+      position: { ...position },
+      type,
+      nation,
+      hp,
+      maxHp: hp,
+    });
+    return id;
   }
 
   private spawnResourceNode(
@@ -142,17 +181,16 @@ export class Simulation {
   step(dt: number) {
     this.time += dt;
 
+    // Buildings passive income / production (player only for now)
     for (const b of this.buildings.values()) {
-      if (b.type === 'farm') {
-        this.resources.food += 1.2 * dt;
-      }
+      if (b.nation !== 'rome') continue;
+
+      if (b.type === 'farm') this.resources.food += 1.2 * dt;
       if (b.type === 'city_center') {
-        this.resources.knowledge += 0.4 * dt; // slow baseline knowledge
+        this.resources.knowledge += 0.4 * dt;
         this.resources.wealth += 0.3 * dt;
       }
-      if (b.type === 'library') {
-        this.resources.knowledge += 1.5 * dt; // main knowledge source
-      }
+      if (b.type === 'library') this.resources.knowledge += 1.5 * dt;
 
       if (b.productionTimer != null && b.productionTimer > 0) {
         b.productionTimer -= dt;
@@ -160,15 +198,32 @@ export class Simulation {
       }
     }
 
+    // Research
     if (this.research.current && this.research.timeRemaining > 0) {
       this.research.timeRemaining -= dt;
-      const total = this.researchTimeFor(this.research.current);
+      const total = this.researchTimeFor();
       this.research.progress = 1 - this.research.timeRemaining / total;
       if (this.research.timeRemaining <= 0) this.completeResearch();
     }
 
+    // Units: combat, gather, move
+    const toRemove: EntityId[] = [];
+
     for (const unit of this.units.values()) {
-      if (unit.type === 'citizen' && unit.gatherTargetId) {
+      unit.attackTimer = Math.max(0, unit.attackTimer - dt);
+
+      if (unit.hp <= 0) {
+        toRemove.push(unit.id);
+        continue;
+      }
+
+      // Attack behavior
+      if (unit.attackTargetId) {
+        this.updateCombat(unit, dt);
+        continue;
+      }
+
+      if (unit.nation === 'rome' && unit.type === 'citizen' && unit.gatherTargetId) {
         this.updateGathering(unit, dt);
         continue;
       }
@@ -189,6 +244,51 @@ export class Simulation {
       const step = Math.min(unit.speed * dt, dist);
       unit.position.x += (dx / dist) * step;
       unit.position.z += (dz / dist) * step;
+    }
+
+    for (const id of toRemove) {
+      this.units.delete(id);
+      this.selected.delete(id);
+    }
+
+    // Simple AI
+    this.aiTimer -= dt;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 5 + Math.random() * 4;
+      this.runSimpleAI();
+    }
+  }
+
+  private updateCombat(unit: Unit, dt: number) {
+    const target = this.units.get(unit.attackTargetId!);
+    if (!target || target.hp <= 0 || target.nation === unit.nation) {
+      unit.attackTargetId = undefined;
+      return;
+    }
+
+    const dist = distanceXZ(unit.position, target.position);
+
+    if (dist > unit.attackRange) {
+      // Chase
+      unit.target = { ...target.position };
+      const dx = target.position.x - unit.position.x;
+      const dz = target.position.z - unit.position.z;
+      const step = Math.min(unit.speed * dt, dist);
+      unit.position.x += (dx / dist) * step;
+      unit.position.z += (dz / dist) * step;
+      return;
+    }
+
+    // In range — attack
+    unit.target = undefined;
+    if (unit.attackTimer <= 0) {
+      target.hp -= unit.attack;
+      unit.attackTimer = unit.attackCooldown;
+
+      // Target retaliates if idle and in range
+      if (!target.attackTargetId && distanceXZ(target.position, unit.position) <= target.attackRange + 0.5) {
+        target.attackTargetId = unit.id;
+      }
     }
   }
 
@@ -230,31 +330,58 @@ export class Simulation {
     if (node.amount <= 0) unit.gatherTargetId = undefined;
   }
 
+  private runSimpleAI() {
+    const enemies = [...this.units.values()].filter((u) => u.nation === 'gaul' && u.hp > 0);
+    const players = [...this.units.values()].filter((u) => u.nation === 'rome' && u.hp > 0);
+    if (enemies.length === 0 || players.length === 0) return;
+
+    // Occasionally send 1–2 warriors toward nearest player unit
+    const attackers = enemies.filter((e) => !e.attackTargetId).slice(0, 2);
+    for (const a of attackers) {
+      let nearest: Unit | null = null;
+      let best = Infinity;
+      for (const p of players) {
+        const d = distanceXZ(a.position, p.position);
+        if (d < best) {
+          best = d;
+          nearest = p;
+        }
+      }
+      if (nearest && best < 70) {
+        a.attackTargetId = nearest.id;
+      }
+    }
+  }
+
   private finishProduction(b: Building) {
     const type = b.productionType;
     b.productionTimer = undefined;
     b.productionType = undefined;
     if (!type) return;
-    if (this.units.size >= this.popCap) return;
+    if (this.countPlayerUnits() >= this.popCap) return;
 
-    const id = createEntityId();
-    const offset = (Math.random() - 0.5) * 4;
-    this.units.set(id, {
-      id,
-      position: {
-        x: b.position.x + 3 + offset,
-        y: 0,
-        z: b.position.z + 3,
-      },
-      speed: type === 'legionary' ? 3.5 : 4,
-      nation: 'rome',
-      type,
-      hp: type === 'legionary' ? 120 : 40,
-      maxHp: type === 'legionary' ? 120 : 40,
+    this.spawnUnit(type, 'rome', {
+      x: b.position.x + 3 + (Math.random() - 0.5) * 4,
+      y: 0,
+      z: b.position.z + 3,
     });
   }
 
-  private researchTimeFor(_track: string): number {
+  private countPlayerUnits(): number {
+    let n = 0;
+    for (const u of this.units.values()) if (u.nation === 'rome') n++;
+    return n;
+  }
+
+  private countPlayerCities(): number {
+    let n = 0;
+    for (const b of this.buildings.values()) {
+      if (b.nation === 'rome' && b.type === 'city_center') n++;
+    }
+    return n;
+  }
+
+  private researchTimeFor(): number {
     const scienceBonus = 1 - this.research.science * 0.08;
     return 25 * Math.max(0.5, scienceBonus);
   }
@@ -267,7 +394,10 @@ export class Simulation {
     this.research.progress = 0;
     this.research.timeRemaining = 0;
     if (track === 'military') this.popCap += 10;
+    if (track === 'civic') this.cityLimit += 1;
   }
+
+  // ── Selection ──────────────────────────────────────────────
 
   clearSelection() {
     this.selected.clear();
@@ -279,7 +409,8 @@ export class Simulation {
       this.selected.clear();
       this.selectedBuildingId = null;
     }
-    if (this.units.has(id)) this.selected.add(id);
+    const u = this.units.get(id);
+    if (u && u.nation === 'rome') this.selected.add(id);
   }
 
   selectUnits(ids: EntityId[], additive = false) {
@@ -288,13 +419,15 @@ export class Simulation {
       this.selectedBuildingId = null;
     }
     for (const id of ids) {
-      if (this.units.has(id)) this.selected.add(id);
+      const u = this.units.get(id);
+      if (u && u.nation === 'rome') this.selected.add(id);
     }
   }
 
   selectBuilding(id: EntityId) {
     this.selected.clear();
-    this.selectedBuildingId = id;
+    const b = this.buildings.get(id);
+    if (b && b.nation === 'rome') this.selectedBuildingId = id;
   }
 
   getSelectedUnits(): Unit[] {
@@ -311,6 +444,8 @@ export class Simulation {
     return this.buildings.get(this.selectedBuildingId) ?? null;
   }
 
+  // ── Commands ───────────────────────────────────────────────
+
   orderMoveSelected(target: Vec3) {
     for (const id of this.selected) this.orderMove(id, target);
   }
@@ -320,6 +455,7 @@ export class Simulation {
     if (!unit) return;
     unit.target = { ...target };
     unit.gatherTargetId = undefined;
+    unit.attackTargetId = undefined;
   }
 
   orderGatherSelected(nodeId: EntityId) {
@@ -330,7 +466,22 @@ export class Simulation {
       const unit = this.units.get(id);
       if (!unit || unit.type !== 'citizen') continue;
       unit.gatherTargetId = nodeId;
+      unit.attackTargetId = undefined;
       unit.target = { ...node.position };
+    }
+  }
+
+  orderAttackSelected(targetUnitId: EntityId) {
+    const target = this.units.get(targetUnitId);
+    if (!target || target.nation === 'rome') return;
+
+    for (const id of this.selected) {
+      const unit = this.units.get(id);
+      if (!unit) continue;
+      // Citizens can fight weakly; military preferred
+      unit.attackTargetId = targetUnitId;
+      unit.gatherTargetId = undefined;
+      unit.target = undefined;
     }
   }
 
@@ -362,15 +513,8 @@ export class Simulation {
     this.resources.timber -= costTimber;
     this.resources.wealth -= costWealth;
 
-    const id = createEntityId();
-    this.buildings.set(id, {
-      id,
-      position: pos,
-      type,
-      nation: 'rome',
-      hp: type === 'barracks' ? 800 : type === 'library' ? 600 : 400,
-      maxHp: type === 'barracks' ? 800 : type === 'library' ? 600 : 400,
-    });
+    const hp = type === 'barracks' ? 800 : type === 'library' ? 600 : 400;
+    this.addBuilding(type, 'rome', pos, hp);
     return true;
   }
 
@@ -386,11 +530,38 @@ export class Simulation {
     return this.placeBuildingNearCitizens('library', 80, 40);
   }
 
+  /** Found a new city (requires civic progress or default limit) */
+  tryFoundCity(): boolean {
+    if (this.countPlayerCities() >= this.cityLimit) return false;
+
+    const citizens = this.getSelectedUnits().filter((u) => u.type === 'citizen');
+    if (citizens.length < 1) return false;
+
+    const costTimber = 120;
+    const costWealth = 50;
+    if (this.resources.timber < costTimber || this.resources.wealth < costWealth) return false;
+
+    // Use first selected citizen position
+    const c = citizens[0];
+    // Must be somewhat far from existing cities
+    for (const b of this.buildings.values()) {
+      if (b.type === 'city_center' && b.nation === 'rome') {
+        if (distanceXZ(c.position, b.position) < 25) return false;
+      }
+    }
+
+    this.resources.timber -= costTimber;
+    this.resources.wealth -= costWealth;
+
+    this.addBuilding('city_center', 'rome', { ...c.position }, 1800);
+    return true;
+  }
+
   tryTrainLegionary(): boolean {
     const b = this.getSelectedBuilding();
     if (!b || b.type !== 'barracks') return false;
     if (b.productionTimer != null && b.productionTimer > 0) return false;
-    if (this.units.size >= this.popCap) return false;
+    if (this.countPlayerUnits() >= this.popCap) return false;
 
     const costFood = 60;
     const costMetal = 20;
@@ -405,7 +576,9 @@ export class Simulation {
   }
 
   tryResearch(track: 'science' | 'civic' | 'military' | 'commerce'): boolean {
-    const hasLibrary = [...this.buildings.values()].some((b) => b.type === 'library');
+    const hasLibrary = [...this.buildings.values()].some(
+      (b) => b.type === 'library' && b.nation === 'rome'
+    );
     if (!hasLibrary) return false;
     if (this.research.current) return false;
 
@@ -422,7 +595,7 @@ export class Simulation {
     this.resources.wealth -= costWealth;
 
     this.research.current = track;
-    this.research.timeRemaining = this.researchTimeFor(track);
+    this.research.timeRemaining = this.researchTimeFor();
     this.research.progress = 0;
     return true;
   }
