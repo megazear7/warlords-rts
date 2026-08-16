@@ -14,11 +14,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
-      "@core/*": ["src/core/*"],
-      "@renderer/*": ["src/renderer/*"],
-      "@data/*": ["src/data/*"]
+      "@core/*": ["./src/core/*"],
+      "@renderer/*": ["./src/renderer/*"],
+      "@data/*": ["./src/data/*"]
     }
   },
   "include": ["src"]
