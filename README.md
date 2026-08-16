@@ -3,28 +3,23 @@
 A modern 3D browser-based real-time strategy game inspired by *Rise of Nations*.
 
 **Nations at launch:** Rome · Persia · Egypt · Gauls  
-**Key innovation:** Nation-unique Epochs instead of shared Ages  
-**Core systems retained:** Four research tracks (Science / Civic / Military / Commerce), capture-only cities, attrition + Supply Wagons
+**Key innovation:** Nation-unique Epochs instead of shared Ages
 
-## Current Status
+## Current Status — Early Phase 1
 
-**Phase 0 complete → early Phase 1 underway**
+Playable right now:
 
-Working right now:
-- Vite + TypeScript + Three.js scaffold
-- Pure simulation core (no rendering knowledge)
-- Fixed-timestep game loop (20 Hz)
-- Procedural terrain
-- Placeholder City Center + citizens + scout
-- **Unit selection** (left-click, Shift+click to add)
-- **Move orders** (right-click ground)
-- Selection rings on units
+- Procedural terrain + placeholder City Center
+- Citizens + Scout
+- **Unit selection** (click + box select)
+- **Move orders**
+- **Resource nodes** (food bushes, trees, metal rocks)
+- **Gathering** (right-click a resource with citizens selected)
+- **Build Farm** (press **F** with citizens selected, costs 60 timber)
 - Resource + selection HUD
-- RTS camera (pan / orbit / zoom)
+- RTS camera
 
 ## Design Documentation
-
-All research, design decisions, systems, and roadmaps live in the project Notion workspace:
 
 → [Warlords Notion Hub](https://app.notion.com/p/Warlords-3be290435c2f809e8fefee45284db1fa)
 
@@ -37,42 +32,35 @@ npm install
 npm run dev
 ```
 
-Open the URL shown in the terminal (usually http://localhost:5173).
-
 ### Controls
+
 | Input | Action |
 |-------|--------|
 | Left-click unit | Select |
-| Shift + left-click | Add to selection |
-| Left-click empty ground | Clear selection |
+| Left-drag | Box select |
+| Shift + left-drag | Pan camera |
 | Right-click ground | Move selected units |
-| Left-drag | Pan camera |
+| Right-click resource | Order citizens to gather |
 | Right-drag | Orbit camera |
 | Mouse wheel | Zoom |
+| **F** | Build Farm (citizens selected + 60 timber) |
 
 ## Project Structure
 
 ```
 src/
-  core/           # Pure simulation (deterministic, no Three.js)
+  core/           # Pure simulation
   renderer/       # Three.js view + input + meshes
-  ui/             # HUD and future UI
-  data/           # Game data (units, techs, nations) – coming soon
+  ui/             # HUD
   main.ts
   Game.ts
 ```
 
-## Roadmap Summary
+## Roadmap
 
-- **Phase 0** ✅ : Project setup + scene + camera + placeholders
-- **Phase 1** (in progress): Selection, movement, basic economy, buildings, research
-- **Phase 2**: Full research tracks, attrition/supply, borders, population
-- **Phase 3**: All four nations + unique Epochs
-- **Phase 4**: Content, polish, AI
-- **Phase 5**: Multiplayer
-
-See the Notion roadmap page for full details.
-
-## License
-
-Private / all rights reserved for now.
+- **Phase 0** ✅ Setup + scene + camera
+- **Phase 1** (in progress) Selection, movement, gathering, buildings
+- **Phase 2** Research tracks, attrition/supply, borders
+- **Phase 3** Four nations + Epochs
+- **Phase 4** Polish + AI
+- **Phase 5** Multiplayer
