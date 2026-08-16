@@ -22,7 +22,6 @@ export class BuildingMeshes {
         this.meshes.set(b.id, mesh);
         this.group.add(mesh);
       } else if (mesh.userData.nation !== b.nation) {
-        // Recreate after capture so colors update
         this.group.remove(mesh);
         mesh = this.createPlaceholder(b);
         this.meshes.set(b.id, mesh);
@@ -43,7 +42,6 @@ export class BuildingMeshes {
         hpBar.scale.x = ratio;
         const mat = hpBar.material as THREE.MeshBasicMaterial;
         mat.color.setHex(ratio > 0.5 ? 0x44ff66 : ratio > 0.25 ? 0xffaa22 : 0xff3333);
-        // Always show HP if damaged
         hpBar.visible = ratio < 0.99 || selectedBuildingId === b.id;
       }
     }
@@ -155,6 +153,56 @@ export class BuildingMeshes {
       dome.position.y = 2.5;
       dome.castShadow = true;
       group.add(dome);
+    } else if (b.type === 'tower') {
+      const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.6, 2.0, 2.2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6a6a6a, roughness: 0.85 })
+      );
+      base.position.y = 1.1;
+      base.castShadow = true;
+      group.add(base);
+      const top = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.9, 1.6, 1.4, 8),
+        new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 })
+      );
+      top.position.y = 2.9;
+      top.castShadow = true;
+      group.add(top);
+      const battlement = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 0.5, 3.2),
+        new THREE.MeshStandardMaterial({ color: 0x4a4a4a })
+      );
+      battlement.position.y = 3.8;
+      group.add(battlement);
+      const flag = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.8, 0.5),
+        new THREE.MeshStandardMaterial({ color: nationColor, side: THREE.DoubleSide })
+      );
+      flag.position.set(0.6, 4.5, 0);
+      group.add(flag);
+    } else if (b.type === 'market') {
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(4.5, 1.8, 4.5),
+        new THREE.MeshStandardMaterial({ color: 0xa08050, roughness: 0.85 })
+      );
+      base.position.y = 0.9;
+      base.castShadow = true;
+      group.add(base);
+      const awning = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 0.15, 5),
+        new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.7 })
+      );
+      awning.position.y = 2.0;
+      group.add(awning);
+      const post1 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5a4030 })
+      );
+      post1.position.set(-2, 1, -2);
+      group.add(post1);
+      const post2 = post1.clone();
+      post2.position.set(2, 1, 2);
+      group.add(post2);
     } else {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(3, 2.5, 3),
