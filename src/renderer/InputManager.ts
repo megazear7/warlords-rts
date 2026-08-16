@@ -120,7 +120,6 @@ export class InputManager {
     );
 
     window.addEventListener('keydown', (e) => {
-      // Escape always available for pause/resume when in-game
       if (e.code === 'Escape' && this.game) {
         this.game.togglePause();
         return;
@@ -142,11 +141,19 @@ export class InputManager {
         case 'KeyT':
           sim.tryTrainLegionary();
           break;
+        case 'KeyW':
+          sim.tryTrainSupplyWagon();
+          break;
         case 'KeyC':
           sim.tryFoundCity();
           break;
+        case 'KeyE': {
+          const ok = sim.tryAdvanceEpoch();
+          if (ok) this.game?.ui.showToast(`Epoch: ${sim.getCurrentEpochName()}`);
+          else this.game?.ui.showToast('Cannot advance epoch (cost or max)');
+          break;
+        }
         case 'KeyS':
-          // Quick-save slot 1
           this.game?.saveSlot(1);
           break;
         case 'Digit1':
@@ -205,7 +212,7 @@ export class InputManager {
     const cam = this.renderer.camera;
     const rect = this.renderer.domElement.getBoundingClientRect();
     for (const unit of this.simulation.getAllUnits()) {
-      if (unit.nation !== 'rome') continue;
+      if (unit.nation !== this.simulation.playerNation) continue;
       const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
       pos.project(cam);
       const sx = ((pos.x + 1) / 2) * rect.width + rect.left;
@@ -235,7 +242,7 @@ export class InputManager {
     const hitUnitId = this.raycastWithUserData(clientX, clientY, 'unitId');
     if (hitUnitId) {
       const unit = this.simulation.units.get(hitUnitId);
-      if (unit && unit.nation !== 'rome') {
+      if (unit && unit.nation !== this.simulation.playerNation) {
         this.simulation.orderAttackSelected(hitUnitId);
         return;
       }
