@@ -1,11 +1,6 @@
 import * as THREE from 'three';
 import { Unit } from '../core/Simulation';
 
-/**
- * Manages visual representation of units.
- * Currently uses simple geometric placeholders.
- * Selection rings are shown for selected units.
- */
 export class UnitMeshes {
   private group = new THREE.Group();
   private meshes = new Map<string, THREE.Object3D>();
@@ -29,7 +24,6 @@ export class UnitMeshes {
 
       mesh.position.set(unit.position.x, unit.position.y, unit.position.z);
 
-      // Update selection ring visibility
       const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
       if (ring) {
         const mat = ring.material as THREE.MeshBasicMaterial;
@@ -37,7 +31,6 @@ export class UnitMeshes {
       }
     }
 
-    // Remove meshes for units that no longer exist
     for (const [id, mesh] of this.meshes) {
       if (!seen.has(id)) {
         this.group.remove(mesh);
@@ -49,41 +42,52 @@ export class UnitMeshes {
   private createPlaceholder(unit: Unit): THREE.Object3D {
     const group = new THREE.Group();
 
-    // Body
-    const bodyGeo = new THREE.CapsuleGeometry(0.35, 0.7, 4, 8);
-    let color = 0xc4a35a; // default citizen tan
+    let bodyColor = 0xc4a35a;
+    let scale = 1;
 
-    if (unit.type === 'scout') color = 0x4a7c9b;
-    if (unit.nation === 'rome' && unit.type === 'citizen') color = 0xb08d57;
+    if (unit.type === 'scout') bodyColor = 0x4a7c9b;
+    if (unit.type === 'citizen') bodyColor = 0xb08d57;
+    if (unit.type === 'legionary') {
+      bodyColor = 0x8b1a1a; // Roman red
+      scale = 1.15;
+    }
 
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.7,
-      metalness: 0.1,
-    });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.35 * scale, 0.7 * scale, 4, 8),
+      new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7, metalness: 0.1 })
+    );
     body.castShadow = true;
-    body.position.y = 0.7;
+    body.position.y = 0.7 * scale;
     group.add(body);
 
-    // Simple head
-    const headGeo = new THREE.SphereGeometry(0.28, 8, 8);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xe0c8a0 });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.55;
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28 * scale, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xe0c8a0 })
+    );
+    head.position.y = 1.55 * scale;
     head.castShadow = true;
     group.add(head);
 
-    // Selection ring
-    const ringGeo = new THREE.RingGeometry(0.55, 0.75, 24);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x44ff88,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    // Legionary shield hint
+    if (unit.type === 'legionary') {
+      const shield = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.9, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0xc4a035, metalness: 0.3, roughness: 0.5 })
+      );
+      shield.position.set(-0.5, 0.9, 0);
+      group.add(shield);
+    }
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.55, 0.75, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x44ff88,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.08;
     group.add(ring);
