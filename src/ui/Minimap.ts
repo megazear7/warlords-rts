@@ -2,7 +2,7 @@ import { Simulation } from '../core/Simulation';
 import { NATIONS, NationId } from '../data/nations';
 
 const SIZE = 160;
-const WORLD = 120; // matches terrain half-extent-ish
+const WORLD = 120;
 
 export class Minimap {
   private canvas: HTMLCanvasElement;
@@ -38,14 +38,26 @@ export class Minimap {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, SIZE, SIZE);
 
-    // Ground
-    ctx.fillStyle = '#2a3a28';
-    ctx.fillRect(0, 0, SIZE, SIZE);
-
     const toXY = (x: number, z: number) => ({
       px: ((x + WORLD / 2) / WORLD) * SIZE,
       py: ((z + WORLD / 2) / WORLD) * SIZE,
     });
+
+    // Ground — unexplored near-black
+    ctx.fillStyle = '#0a0c0a';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Explored cells as muted terrain
+    const CELL = 8;
+    ctx.fillStyle = '#2a3a28';
+    for (const key of sim.exploredCells) {
+      const [gsx, gsz] = key.split(',').map(Number);
+      const wx = gsx * CELL + CELL / 2;
+      const wz = gsz * CELL + CELL / 2;
+      const { px, py } = toXY(wx, wz);
+      const s = (CELL / WORLD) * SIZE * 1.1;
+      ctx.fillRect(px - s / 2, py - s / 2, s, s);
+    }
 
     // Territory soft blobs via cities
     for (const b of sim.getAllBuildings()) {
@@ -72,8 +84,9 @@ export class Minimap {
       ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
     }
 
-    // Buildings
+    // Buildings (enemy only if in vision)
     for (const b of sim.getAllBuildings()) {
+      if (b.nation !== sim.playerNation && !sim.isVisibleToPlayer(b.position)) continue;
       const { px, py } = toXY(b.position.x, b.position.z);
       const nationId = b.nation as NationId;
       const color = NATIONS[nationId]?.color ?? 0x888888;

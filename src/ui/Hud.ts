@@ -34,7 +34,7 @@ export class Hud {
         <div style="margin-top:4px; font-size:12px;">U sell food · I buy metal</div>
       </div>
       <div class="hud-help">
-        A attack-move · Y tower (Mil1) · M market (Com1) · U/I trade · V citizen · G general<br/>
+        A attack-move · Y tower (Mil1) · H wall (Mil2) · M market (Com1) · U/I trade · V citizen · G general<br/>
         T infantry · R elite · Q scout · W wagon · F1–F4 research · E epoch · Ctrl+0-9
       </div>
     `;
@@ -120,7 +120,7 @@ export class Hud {
 
     const trainable = getTrainableForNation(sim.playerNation, sim.epochIndex);
     this.unitsEl.textContent =
-      'V citizen · Y tower · M market · U/I trade · Barracks: ' +
+      'V citizen · Y tower · H wall · M market · U/I trade · Barracks: ' +
       trainable.map((u) => `${u.name}${u.minEpoch > 0 ? '*' : ''}`).join(', ');
 
     this.fpsEl.textContent = fps != null ? `· ${fps} FPS` : '';
