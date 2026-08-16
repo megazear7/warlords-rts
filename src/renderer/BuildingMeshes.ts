@@ -24,7 +24,6 @@ export class BuildingMeshes {
 
       mesh.position.set(b.position.x, b.position.y, b.position.z);
 
-      // Selection highlight
       const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
       if (ring) {
         const mat = ring.material as THREE.MeshBasicMaterial;
@@ -42,11 +41,17 @@ export class BuildingMeshes {
 
   private createPlaceholder(b: Building): THREE.Object3D {
     const group = new THREE.Group();
+    const isEnemy = b.nation !== 'rome';
 
     if (b.type === 'city_center') {
+      const baseColor = isEnemy ? 0x5a6b45 : 0x8b7355;
+      const topColor = isEnemy ? 0x6a7b55 : 0x9c8466;
+      const roofColor = isEnemy ? 0x3d5a2a : 0x6b3a2a;
+      const flagColor = isEnemy ? 0x2d8b2d : 0xb22222;
+
       const base = new THREE.Mesh(
         new THREE.BoxGeometry(6, 3.5, 6),
-        new THREE.MeshStandardMaterial({ color: 0x8b7355, roughness: 0.85 })
+        new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.85 })
       );
       base.position.y = 1.75;
       base.castShadow = true;
@@ -55,7 +60,7 @@ export class BuildingMeshes {
 
       const top = new THREE.Mesh(
         new THREE.BoxGeometry(4.2, 2.2, 4.2),
-        new THREE.MeshStandardMaterial({ color: 0x9c8466, roughness: 0.8 })
+        new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.8 })
       );
       top.position.y = 4.6;
       top.castShadow = true;
@@ -63,7 +68,7 @@ export class BuildingMeshes {
 
       const roof = new THREE.Mesh(
         new THREE.ConeGeometry(3.4, 1.8, 4),
-        new THREE.MeshStandardMaterial({ color: 0x6b3a2a, roughness: 0.9 })
+        new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.9 })
       );
       roof.position.y = 6.6;
       roof.rotation.y = Math.PI / 4;
@@ -79,7 +84,7 @@ export class BuildingMeshes {
 
       const flag = new THREE.Mesh(
         new THREE.PlaneGeometry(1.4, 0.9),
-        new THREE.MeshStandardMaterial({ color: 0xb22222, side: THREE.DoubleSide })
+        new THREE.MeshStandardMaterial({ color: flagColor, side: THREE.DoubleSide })
       );
       flag.position.set(2.5, 9.0, 1.8);
       group.add(flag);
@@ -118,7 +123,6 @@ export class BuildingMeshes {
       base.receiveShadow = true;
       group.add(base);
 
-      // Training yard posts
       for (const [x, z] of [
         [-2, -2],
         [2, -2],
@@ -133,7 +137,6 @@ export class BuildingMeshes {
         group.add(post);
       }
 
-      // Red banner
       const banner = new THREE.Mesh(
         new THREE.PlaneGeometry(1.2, 1.6),
         new THREE.MeshStandardMaterial({ color: 0x8b0000, side: THREE.DoubleSide })
@@ -149,7 +152,6 @@ export class BuildingMeshes {
       base.castShadow = true;
       group.add(base);
 
-      // Dome / roof
       const dome = new THREE.Mesh(
         new THREE.SphereGeometry(2.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
         new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.5, metalness: 0.2 })
@@ -158,7 +160,6 @@ export class BuildingMeshes {
       dome.castShadow = true;
       group.add(dome);
 
-      // Columns
       for (const [x, z] of [
         [-1.8, -1.8],
         [1.8, -1.8],
@@ -182,7 +183,6 @@ export class BuildingMeshes {
       group.add(mesh);
     }
 
-    // Selection ring for buildings
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(3.2, 3.6, 32),
       new THREE.MeshBasicMaterial({
