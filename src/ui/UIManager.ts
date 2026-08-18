@@ -53,16 +53,17 @@ export class UIManager {
     this.show('main');
   }
 
-  private syncHomeVideo(onHome: boolean) {
+  private syncMenuVideo(inMenus: boolean) {
     const app = document.getElementById('app');
     const video = document.getElementById('menu-bg-video') as HTMLVideoElement | null;
-    app?.classList.toggle('menu-home', onHome);
-    this.root.classList.toggle('ui-home', onHome);
+    app?.classList.toggle('menu-video', inMenus);
+    this.root.classList.toggle('ui-video', inMenus);
     if (!video) return;
-    if (onHome) {
-      video.currentTime = 0;
-      const play = video.play();
-      if (play) void play.catch(() => {});
+    if (inMenus) {
+      if (video.paused) {
+        const play = video.play();
+        if (play) void play.catch(() => {});
+      }
     } else {
       video.pause();
     }
@@ -84,7 +85,7 @@ export class UIManager {
     this.screen = screen;
     this.root.innerHTML = '';
     this.root.className = screen === 'none' ? 'ui-hidden' : 'ui-visible';
-    this.syncHomeVideo(screen === 'main');
+    this.syncMenuVideo(screen !== 'none');
 
     if (screen === 'none') return;
 
@@ -132,18 +133,18 @@ export class UIManager {
   private renderMainMenu() {
     const hasSaves = SaveSystem.hasAnySave();
     this.root.innerHTML = `
-      <div class="menu-panel main-menu">
-        <div class="menu-brand">
-          <h1>WARLORDS</h1>
+      <div class="home-layout">
+        <img class="menu-title" src="/ui/warlords-title.png" alt="Warlords" />
+        <div class="menu-panel main-menu">
           <p class="tagline">Nation-unique epochs · Attrition · Supply lines</p>
+          <div class="menu-buttons">
+            <button data-action="new">New Game</button>
+            <button data-action="load" ${hasSaves ? '' : 'disabled'}>Load Game</button>
+            <button data-action="settings">Settings</button>
+            <button data-action="profile">Profile</button>
+          </div>
+          <div class="menu-footer">Commander: <strong>${escapeHtml(this.profile.displayName)}</strong></div>
         </div>
-        <div class="menu-buttons">
-          <button data-action="new">New Game</button>
-          <button data-action="load" ${hasSaves ? '' : 'disabled'}>Load Game</button>
-          <button data-action="settings">Settings</button>
-          <button data-action="profile">Profile</button>
-        </div>
-        <div class="menu-footer">Commander: <strong>${escapeHtml(this.profile.displayName)}</strong></div>
       </div>
     `;
 

@@ -14,23 +14,19 @@
       #app { width: 100%; height: 100%; position: relative; }
       canvas { display: block; }
 
-      /* HUD — 2172×724 (exactly 3:1) ornate frames, centered */
+      /* HUD — 2172×724 (exactly 3:1) ornate frames, centered on the bottom edge */
       #hud {
         position: absolute;
         left: 50%;
-        bottom: 4px;
+        bottom: 0;
         transform: translateX(-50%);
         width: min(94vw, calc(28vh * 2172 / 724));
         aspect-ratio: 2172 / 724;
         height: auto;
         color: #3a2a18;
-        background-color: transparent;
-        background-image: url('/ui/generic-heads-up-display.png');
-        background-repeat: no-repeat;
-        background-size: 100% 100%;
-        background-position: center;
-        /* % padding is of width. 6.6% of W ≈ 20% of H (under the crest). */
-        padding: 6.6% 11% 2% 11%;
+        background: transparent;
+        /* % padding is of width. Less top (crest sits lower), more bottom (lift widgets). */
+        padding: 4.4% 11% 7.2% 11%;
         box-sizing: border-box;
         border: none;
         border-radius: 0;
@@ -45,9 +41,25 @@
         z-index: 10;
         overflow: hidden;
       }
-      #hud[data-frame="rome"] { background-image: url('/ui/roman-heads-up-display.png'); }
-      #hud[data-frame="persia"] { background-image: url('/ui/persian-heads-up-display.png'); }
-      #hud[data-frame="generic"] { background-image: url('/ui/generic-heads-up-display.png'); }
+      #hud::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -14%;
+        width: 100%;
+        aspect-ratio: 2172 / 724;
+        background-image: url('/ui/generic-heads-up-display.png');
+        background-repeat: no-repeat;
+        background-size: 100% 100%;
+        background-position: bottom center;
+        pointer-events: none;
+        z-index: 0;
+      }
+      #hud[data-frame="rome"]::before { background-image: url('/ui/roman-heads-up-display.png'); }
+      #hud[data-frame="persia"]::before { background-image: url('/ui/persian-heads-up-display.png'); }
+      #hud[data-frame="generic"]::before { background-image: url('/ui/generic-heads-up-display.png'); }
+      #hud > * { position: relative; z-index: 1; }
       #hud strong { color: #7a4a10; }
       .hud-strip {
         display: flex;
@@ -162,18 +174,20 @@
         min-width: 0;
       }
       .hud-commands {
-        display: flex;
-        flex-wrap: wrap;
-        align-content: flex-start;
-        justify-content: flex-end;
+        display: grid;
+        grid-template-columns: repeat(6, 42px);
+        grid-auto-rows: 42px;
+        grid-auto-flow: row;
         gap: 4px;
+        justify-content: end;
+        align-content: start;
         min-width: 0;
         pointer-events: auto;
       }
       .hud-cmd {
         position: relative;
-        width: 48px;
-        height: 48px;
+        width: 42px;
+        height: 42px;
         padding: 0;
         border: none;
         background: transparent;
@@ -251,7 +265,7 @@
         display: none;
         background: #0a0a0a;
       }
-      #app.menu-home #menu-bg-video { display: block; }
+      #app.menu-video #menu-bg-video { display: block; }
 
       /* UI Overlay */
       #ui-overlay {
@@ -265,9 +279,24 @@
         display: none;
         pointer-events: none;
       }
-      #ui-overlay.ui-home {
+      #ui-overlay.ui-video {
         background: rgba(6, 5, 3, 0.28);
         backdrop-filter: blur(1.5px);
+      }
+      .home-layout {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        width: min(720px, 92vw);
+      }
+      .menu-title {
+        display: block;
+        width: 100%;
+        height: auto;
+        mix-blend-mode: screen;
+        filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.55));
+        pointer-events: none;
       }
 
       .menu-panel {
