@@ -50,6 +50,9 @@ export class UIManager {
     this.toastEl.id = 'toast';
     document.getElementById('app')?.appendChild(this.toastEl);
 
+    const video = document.getElementById('menu-bg-video') as HTMLVideoElement | null;
+    if (video) audio.attachMenuVideo(video);
+
     this.show('main');
   }
 
@@ -59,6 +62,7 @@ export class UIManager {
     app?.classList.toggle('menu-video', inMenus);
     this.root.classList.toggle('ui-video', inMenus);
     if (!video) return;
+    audio.setMenuVideoAudible(inMenus);
     if (inMenus) {
       if (video.paused) {
         const play = video.play();
@@ -278,8 +282,8 @@ export class UIManager {
       <div class="menu-panel settings-panel">
         <h2>Settings</h2>
         <label>Master Volume <input type="range" min="0" max="100" value="${s.masterVolume * 100}" data-setting="masterVolume" /></label>
-        <label>Music Volume <input type="range" min="0" max="100" value="${s.musicVolume * 100}" data-setting="musicVolume" /></label>
-        <label>SFX Volume <input type="range" min="0" max="100" value="${s.sfxVolume * 100}" data-setting="sfxVolume" /></label>
+        <label>Music <input type="range" min="0" max="100" value="${s.musicVolume * 100}" data-setting="musicVolume" /></label>
+        <label>Sound Effects <input type="range" min="0" max="100" value="${s.sfxVolume * 100}" data-setting="sfxVolume" /></label>
         <label>Graphics
           <select data-setting="graphicsQuality">
             <option value="low" ${s.graphicsQuality === 'low' ? 'selected' : ''}>Low</option>

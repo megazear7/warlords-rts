@@ -84,7 +84,6 @@ export class Game {
 
     this.applySettings(this.ui.getSettings());
     void audio.preloadFiles();
-    audio.playMusic('music_menu');
   }
 
   start() {
@@ -182,7 +181,7 @@ export class Game {
     this.minimap.setVisible(false);
     this.researchPanel.hide();
     audio.setMusicDucked(false);
-    audio.playMusic('music_menu');
+    audio.stopMusic();
     audio.play('ui_click');
     this.ui.show('main');
   }
@@ -289,10 +288,8 @@ export class Game {
         }
         if (outcome === 'victory') {
           audio.play('victory');
-          audio.playMusic('music_victory');
         } else {
           audio.play('defeat');
-          audio.playMusic('music_defeat');
         }
         this.ui.show(outcome === 'victory' ? 'victory' : 'defeat');
       }

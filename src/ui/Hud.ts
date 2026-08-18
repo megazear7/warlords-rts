@@ -13,6 +13,7 @@ const BUTTON_ART = '/ui/building-button-placeholder.png';
 
 export class Hud {
   private root: HTMLElement;
+  private resourceBar: HTMLElement;
   private resourcesEl: HTMLElement;
   private portraitsEl: HTMLElement;
   private selectionEl: HTMLElement;
@@ -38,10 +39,19 @@ export class Hud {
 
     this.root.dataset.frame = 'generic';
 
+    this.resourceBar = document.getElementById('resource-bar') as HTMLElement;
+    if (!this.resourceBar) {
+      this.resourceBar = document.createElement('div');
+      this.resourceBar.id = 'resource-bar';
+      document.getElementById('app')?.appendChild(this.resourceBar);
+    }
+    this.resourceBar.innerHTML = `
+      <div class="hud-resources" id="hud-resources"></div>
+      <span id="hud-fps" class="hud-fps"></span>
+    `;
+
     this.root.innerHTML = `
       <div class="hud-strip">
-        <div class="hud-brand">Warlords <span id="hud-fps"></span></div>
-        <div class="hud-resources" id="hud-resources"></div>
         <div class="hud-meta">
           <div class="hud-epoch" id="hud-epoch"></div>
           <div id="hud-epoch-next"></div>
@@ -86,6 +96,7 @@ export class Hud {
 
   setVisible(v: boolean) {
     this.root.style.display = v ? 'flex' : 'none';
+    this.resourceBar.style.display = v ? 'flex' : 'none';
   }
 
   update(sim: Simulation, fps?: number, input?: InputManager) {

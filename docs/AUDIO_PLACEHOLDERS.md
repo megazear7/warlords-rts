@@ -32,8 +32,8 @@ No call-site changes are needed; keep the same `SoundId`.
 | alert_attrition | sfx | audio/sfx/alert_attrition.ogg | placeholder |
 | victory | sfx | audio/sfx/victory.ogg | placeholder |
 | defeat | sfx | audio/sfx/defeat.ogg | placeholder |
-| music_menu | music | audio/music/menu.ogg | placeholder |
-| music_gameplay | music | audio/music/gameplay.ogg | placeholder |
+| music_menu | music | audio/music/dawn-of-warlords.mp3 | file |
+| music_gameplay | music | audio/music/dawn-of-warlords.mp3 | file |
 | music_victory | music | audio/music/victory.ogg | placeholder |
 | music_defeat | music | audio/music/defeat.ogg | placeholder |
 

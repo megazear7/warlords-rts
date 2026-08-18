@@ -33,5 +33,6 @@ These were dropped here and moved into the game:
 - `roman-heads-up-display.png` → `public/ui/roman-heads-up-display.png` — Rome HUD frame (2172×724, 3:1)
 - `persian-heads-up-display.png` → `public/ui/persian-heads-up-display.png` — Persia HUD frame (2172×724, 3:1)
 - `generic-heads-up-display.png` → `public/ui/generic-heads-up-display.png` — default HUD frame (2172×724, 3:1)
-- `home-screen-background.mp4` → `public/video/home-screen-background.mp4` — menu fullscreen background (1280×720)
+- `home-screen-background.mp4` / `background.mp4` → `public/video/home-screen-background.mp4` — menu fullscreen background + audio (1280×720)
 - `warlords-title.png` → `public/ui/warlords-title.png` — home-screen title (2172×724)
+- `The Dawn of Warlords.mp3` → `public/audio/music/dawn-of-warlords.mp3` — menu and in-game music

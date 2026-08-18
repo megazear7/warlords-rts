@@ -28,15 +28,19 @@ export class AudioManager {
   private musicOscStop: (() => void) | null = null;
   private currentMusic: SoundId | null = null;
   private musicDucked = false;
+  private menuVideo: HTMLMediaElement | null = null;
+  private menuVideoAudible = false;
 
   /** Call once from UI gesture (menu click) to unlock autoplay */
   async unlock() {
-    if (this.unlocked) return;
     this.ensureContext();
     if (this.ctx?.state === 'suspended') {
       await this.ctx.resume();
     }
+    const first = !this.unlocked;
     this.unlocked = true;
+    this.syncMenuVideoGain();
+    if (first) this.resumePendingMusic();
   }
 
   applySettings(s: GameSettings) {
@@ -48,6 +52,17 @@ export class AudioManager {
 
   setMuted(m: boolean) {
     this.muted = m;
+    this.updateGains();
+  }
+
+  attachMenuVideo(el: HTMLMediaElement) {
+    this.menuVideo = el;
+    this.syncMenuVideoGain();
+  }
+
+  /** When true, menu video carries the music; Web Audio theme is silenced. */
+  setMenuVideoAudible(on: boolean) {
+    this.menuVideoAudible = on;
     this.updateGains();
   }
 
@@ -74,27 +89,17 @@ export class AudioManager {
   playMusic(id: SoundId) {
     const def = SOUND_CATALOG[id];
     if (!def || def.bus !== 'music') return;
-    if (this.currentMusic === id) return;
+
+    const current = this.currentMusic ? SOUND_CATALOG[this.currentMusic] : null;
+    if (this.musicSource && current && current.file === def.file) {
+      this.currentMusic = id;
+      return;
+    }
+    if (this.currentMusic === id && this.musicSource) return;
 
     this.stopMusic();
     this.currentMusic = id;
-    if (!this.unlocked) return;
-
-    this.ensureContext();
-    if (!this.ctx || !this.musicGain) return;
-
-    if (def.mode === 'file' && this.buffers.has(id)) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = this.buffers.get(id)!;
-      src.loop = !!def.loop;
-      src.connect(this.musicGain);
-      src.start();
-      this.musicSource = src;
-      return;
-    }
-
-    // Placeholder: soft looping drone via oscillator
-    this.startPlaceholderMusic(def);
+    this.startCurrentMusic();
   }
 
   stopMusic() {
@@ -128,18 +133,24 @@ export class AudioManager {
   async preloadFiles() {
     this.ensureContext();
     if (!this.ctx) return;
+    const decodedByFile = new Map<string, AudioBuffer>();
     for (const def of Object.values(SOUND_CATALOG)) {
       if (def.mode !== 'file') continue;
       try {
-        const res = await fetch('/' + def.file);
-        if (!res.ok) continue;
-        const arr = await res.arrayBuffer();
-        const buf = await this.ctx.decodeAudioData(arr.slice(0));
+        let buf = decodedByFile.get(def.file);
+        if (!buf) {
+          const res = await fetch('/' + def.file);
+          if (!res.ok) continue;
+          const arr = await res.arrayBuffer();
+          buf = await this.ctx.decodeAudioData(arr.slice(0));
+          decodedByFile.set(def.file, buf);
+        }
         this.buffers.set(def.id, buf);
       } catch (e) {
         console.warn('[audio] failed to load', def.file, e);
       }
     }
+    this.resumePendingMusic();
   }
 
   /** Debug: how many placeholders remain */
@@ -150,6 +161,35 @@ export class AudioManager {
       placeholders: left.length,
       ids: left.map((s) => s.id),
     };
+  }
+
+  private resumePendingMusic() {
+    if (!this.currentMusic || this.musicSource) return;
+    this.startCurrentMusic();
+  }
+
+  private startCurrentMusic() {
+    const id = this.currentMusic;
+    if (!id || !this.unlocked) return;
+    const def = SOUND_CATALOG[id];
+    if (!def || def.bus !== 'music') return;
+
+    this.ensureContext();
+    if (!this.ctx || !this.musicGain) return;
+
+    if (def.mode === 'file') {
+      const buf = this.buffers.get(id);
+      if (!buf) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = !!def.loop;
+      src.connect(this.musicGain);
+      src.start();
+      this.musicSource = src;
+      return;
+    }
+
+    this.startPlaceholderMusic(def);
   }
 
   // ── Internals ──────────────────────────────────────────────
@@ -173,7 +213,16 @@ export class AudioManager {
     const m = this.muted ? 0 : this.masterVol;
     this.masterGain.gain.value = m;
     this.sfxGain.gain.value = this.sfxVol;
-    this.musicGain.gain.value = this.musicVol * (this.musicDucked ? 0.35 : 1);
+    const themeMul = this.menuVideoAudible ? 0 : this.musicDucked ? 0.35 : 1;
+    this.musicGain.gain.value = this.musicVol * themeMul;
+    this.syncMenuVideoGain();
+  }
+
+  private syncMenuVideoGain() {
+    if (!this.menuVideo) return;
+    const vol = this.muted ? 0 : this.masterVol * this.musicVol;
+    this.menuVideo.volume = Math.max(0, Math.min(1, vol));
+    this.menuVideo.muted = !this.unlocked || !this.menuVideoAudible || vol <= 0;
   }
 
   private playBuffer(id: SoundId, def: SoundDef, dest: GainNode) {

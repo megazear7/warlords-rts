@@ -68,27 +68,37 @@
         flex-wrap: nowrap;
         flex-shrink: 0;
       }
-      .hud-brand {
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: #7a4a10;
-        font-weight: 700;
-        flex-shrink: 0;
+      #resource-bar {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 12;
+        display: none;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 8px;
+        pointer-events: none;
+        user-select: none;
+        max-width: min(520px, calc(100vw - 24px));
       }
       .hud-resources {
         display: flex;
         flex-wrap: wrap;
-        gap: 4px 8px;
+        gap: 5px 6px;
         font-variant-numeric: tabular-nums;
       }
       .hud-resources span {
-        background: rgba(90, 55, 20, 0.08);
-        border: 1px solid rgba(120, 80, 30, 0.22);
+        background: rgba(0, 0, 0, 0.62);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 999px;
-        padding: 1px 7px;
+        padding: 3px 8px;
+        font-size: 12px;
+        color: #f2ead8;
+        backdrop-filter: blur(4px);
+      }
+      .hud-fps {
         font-size: 11px;
-        color: #3a2a18;
+        color: rgba(242, 234, 216, 0.7);
       }
       .hud-meta {
         margin-left: auto;
