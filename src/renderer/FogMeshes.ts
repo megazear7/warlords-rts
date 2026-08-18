@@ -1,100 +1,131 @@
 import * as THREE from 'three';
 import { Simulation } from '../core/Simulation';
-import { getTerrainHeight } from './Terrain';
+import { getTerrainHeight, terrainSegmentCount } from './Terrain';
 
 /**
- * RTS fog-of-war plane:
- * - Unexplored: near-black opaque
- * - Explored (not in current vision): dark semi-transparent
+ * Ground-hugging fog-of-war:
+ * - Unexplored: dark
+ * - Explored (not in vision): light haze
  * - Current vision: fully transparent
- *
- * Uses a low-res canvas texture updated from Simulation.exploredCells
- * and live vision radii. Cell size matches EXPLORED_CELL (8 world units).
  */
 const CELL = 8;
-const WORLD = 120; // matches terrain size
-const TEX = 128; // texture resolution
+const FOG_LIFT = 0.12;
+
+function envelopeHeight(x: number, z: number, step: number): number {
+  const h = step * 0.5;
+  let max = getTerrainHeight(x, z);
+  max = Math.max(max, getTerrainHeight(x - h, z - h));
+  max = Math.max(max, getTerrainHeight(x + h, z - h));
+  max = Math.max(max, getTerrainHeight(x - h, z + h));
+  max = Math.max(max, getTerrainHeight(x + h, z + h));
+  return max;
+}
+
+function texSizeForWorld(world: number): number {
+  const pow2 = 2 ** Math.ceil(Math.log2(Math.max(256, world)));
+  return Math.min(1024, pow2);
+}
 
 export class FogMeshes {
   private mesh: THREE.Mesh;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  private texture: THREE.CanvasTexture;
+  private data = new Uint8Array(4);
+  private texture: THREE.DataTexture;
   private dirty = true;
   private lastUpdate = 0;
+  private world = 360;
+  private texSize = 512;
 
-  constructor(scene: THREE.Scene) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = TEX;
-    this.canvas.height = TEX;
-    this.ctx = this.canvas.getContext('2d')!;
+  constructor(scene: THREE.Scene, worldSize = 360) {
+    this.texture = new THREE.DataTexture(this.data as unknown as BufferSource, 1, 1);
+    this.mesh = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        depthWrite: false,
+        depthTest: true,
+        side: THREE.DoubleSide,
+        opacity: 1,
+      })
+    );
+    this.mesh.renderOrder = 2;
+    this.mesh.name = 'fogOfWar';
+    scene.add(this.mesh);
+    this.setWorldSize(worldSize);
+  }
 
-    // Start fully black (unexplored)
-    this.ctx.fillStyle = 'rgba(0,0,0,1)';
-    this.ctx.fillRect(0, 0, TEX, TEX);
+  setWorldSize(worldSize: number) {
+    this.world = worldSize;
+    this.texSize = texSizeForWorld(worldSize);
+    this.data = new Uint8Array(this.texSize * this.texSize * 4);
 
-    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.dispose();
+    this.texture = new THREE.DataTexture(this.data as unknown as BufferSource, this.texSize, this.texSize);
+    this.texture.flipY = false;
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.needsUpdate = true;
 
-    const geo = new THREE.PlaneGeometry(WORLD, WORLD, 48, 48);
+    this.mesh.geometry.dispose();
+    const segs = terrainSegmentCount(worldSize);
+    const geo = new THREE.PlaneGeometry(worldSize, worldSize, segs, segs);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    const step = worldSize / segs;
     for (let i = 0; i < pos.count; i++) {
-      pos.setY(i, getTerrainHeight(pos.getX(i), pos.getZ(i)) + 0.35);
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      pos.setY(i, envelopeHeight(x, z, step) + FOG_LIFT);
+      uv.setXY(i, (x + worldSize / 2) / worldSize, (z + worldSize / 2) / worldSize);
     }
     pos.needsUpdate = true;
+    uv.needsUpdate = true;
+    geo.computeVertexNormals();
+    this.mesh.geometry = geo;
 
-    const mat = new THREE.MeshBasicMaterial({
-      map: this.texture,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
+    const mat = this.mesh.material as THREE.MeshBasicMaterial;
+    mat.map = this.texture;
+    mat.transparent = true;
+    mat.depthWrite = false;
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -2;
+    mat.polygonOffsetUnits = -2;
+    mat.needsUpdate = true;
 
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.renderOrder = 10;
-    this.mesh.name = 'fogOfWar';
-    scene.add(this.mesh);
+    this.dirty = true;
   }
 
-  /** World XZ → texture UV pixel */
   private worldToTex(x: number, z: number): { px: number; py: number } {
-    const u = (x + WORLD / 2) / WORLD;
-    const v = (z + WORLD / 2) / WORLD;
+    const u = (x + this.world / 2) / this.world;
+    const v = (z + this.world / 2) / this.world;
     return {
-      px: Math.floor(u * TEX),
-      py: Math.floor(v * TEX),
+      px: Math.max(0, Math.min(this.texSize - 1, Math.floor(u * this.texSize))),
+      py: Math.max(0, Math.min(this.texSize - 1, Math.floor(v * this.texSize))),
     };
   }
 
   sync(sim: Simulation) {
-    // Throttle texture rebuild (~5 Hz)
     const now = performance.now();
     if (now - this.lastUpdate < 200 && !this.dirty) return;
     this.lastUpdate = now;
     this.dirty = false;
 
-    const ctx = this.ctx;
-    const img = ctx.createImageData(TEX, TEX);
-    const data = img.data;
+    const TEX = this.texSize;
+    const WORLD = this.world;
+    const data = this.data;
 
-    // 1) Base: unexplored = opaque black
     for (let i = 0; i < data.length; i += 4) {
       data[i] = 0;
       data[i + 1] = 0;
       data[i + 2] = 0;
-      data[i + 3] = 230; // almost opaque
+      data[i + 3] = 210;
     }
 
-    // 2) Explored cells → dark translucent
     for (const key of sim.exploredCells) {
       const [gsx, gsz] = key.split(',').map(Number);
       const wx = gsx * CELL + CELL / 2;
       const wz = gsz * CELL + CELL / 2;
       const { px, py } = this.worldToTex(wx, wz);
-      // Fill a block of pixels for this cell
       const cellPx = Math.ceil((CELL / WORLD) * TEX) + 1;
       for (let dy = -cellPx; dy <= cellPx; dy++) {
         for (let dx = -cellPx; dx <= cellPx; dx++) {
@@ -102,18 +133,17 @@ export class FogMeshes {
           const y = py + dy;
           if (x < 0 || y < 0 || x >= TEX || y >= TEX) continue;
           const idx = (y * TEX + x) * 4;
-          data[idx] = 8;
-          data[idx + 1] = 12;
-          data[idx + 2] = 18;
-          data[idx + 3] = 140; // explored but not currently seen
+          data[idx] = 6;
+          data[idx + 1] = 8;
+          data[idx + 2] = 12;
+          data[idx + 3] = 70;
         }
       }
     }
 
-    // 3) Current vision → fully transparent circles
     const punch = (pos: { x: number; z: number }, radius: number) => {
       const { px, py } = this.worldToTex(pos.x, pos.z);
-      const rPx = Math.ceil((radius / WORLD) * TEX);
+      const rPx = Math.max(8, Math.ceil((radius / WORLD) * TEX));
       const r2 = rPx * rPx;
       for (let dy = -rPx; dy <= rPx; dy++) {
         for (let dx = -rPx; dx <= rPx; dx++) {
@@ -122,9 +152,8 @@ export class FogMeshes {
           const y = py + dy;
           if (x < 0 || y < 0 || x >= TEX || y >= TEX) continue;
           const idx = (y * TEX + x) * 4;
-          // Soft edge
           const dist = Math.sqrt(dx * dx + dy * dy) / rPx;
-          const alpha = dist > 0.75 ? Math.floor(100 * (dist - 0.75) / 0.25) : 0;
+          const alpha = dist > 0.72 ? Math.floor(80 * (dist - 0.72) / 0.28) : 0;
           data[idx + 3] = Math.min(data[idx + 3], alpha);
         }
       }
@@ -139,7 +168,6 @@ export class FogMeshes {
       punch(b.position, sim.getVisionRadius(b));
     }
 
-    ctx.putImageData(img, 0, 0);
     this.texture.needsUpdate = true;
   }
 

@@ -1,8 +1,10 @@
 import { Simulation, Unit, Building, ResourceNode, Resources, ResearchState } from './Simulation';
 import { EntityId } from './types';
 import { NationId } from '../data/nations';
+import { DEFAULT_MAP_SIZE, isMapSizeId, MapSizeId } from './world';
+import { NavGrid } from './pathfinding';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY_PREFIX = 'warlords_save_';
 export const SAVE_SLOTS = 3;
 
@@ -18,6 +20,7 @@ export interface SaveSnapshot {
   time: number;
   playerNation: NationId;
   epochIndex: number;
+  mapSizeId?: MapSizeId;
   units: Unit[];
   buildings: Building[];
   resourceNodes: ResourceNode[];
@@ -48,6 +51,7 @@ export class SaveSystem {
       time: sim.time,
       playerNation: sim.playerNation,
       epochIndex: sim.epochIndex,
+      mapSizeId: sim.mapSizeId,
       units: sim.getAllUnits().map((u) => ({
         ...u,
         position: { ...u.position },
@@ -74,6 +78,8 @@ export class SaveSystem {
     sim.time = data.time;
     sim.playerNation = data.playerNation ?? 'rome';
     sim.epochIndex = data.epochIndex ?? 0;
+    sim.setMapSize(isMapSizeId(data.mapSizeId) ? data.mapSizeId : DEFAULT_MAP_SIZE);
+    sim.navGrid = new NavGrid(sim.worldSize);
     sim.selectedBuildingId = data.selectedBuildingId;
 
     for (const u of data.units) {
@@ -85,7 +91,9 @@ export class SaveSystem {
       });
     }
     for (const b of data.buildings) {
-      sim.buildings.set(b.id, { ...b, position: { ...b.position } });
+      const building = { ...b, position: { ...b.position } };
+      sim.buildings.set(b.id, building);
+      sim.navGrid.markBuilding(building);
     }
     for (const n of data.resourceNodes) {
       sim.resourceNodes.set(n.id, { ...n, position: { ...n.position } });

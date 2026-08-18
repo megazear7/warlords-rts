@@ -54,8 +54,12 @@ export function drapeOnTerrain(
  * Good enough for Phase 0; will be replaced by a more sophisticated
  * chunked / biome system later.
  */
-export function createTerrain(size = 120): THREE.Mesh {
-  const segments = 96;
+export function terrainSegmentCount(size: number): number {
+  return Math.min(160, Math.max(96, Math.round(size / 4)));
+}
+
+export function createTerrain(size = 360): THREE.Mesh {
+  const segments = terrainSegmentCount(size);
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
 

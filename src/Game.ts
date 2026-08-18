@@ -9,6 +9,7 @@ import { SaveSystem } from './core/SaveSystem';
 import { ProfileStore } from './core/Profile';
 import { GameSettings } from './core/Settings';
 import { NationId } from './data/nations';
+import { DEFAULT_MAP_SIZE, MapSizeId } from './core/world';
 import { audio } from './audio/AudioManager';
 
 export type GameMode = 'menu' | 'playing' | 'paused' | 'ended';
@@ -46,8 +47,12 @@ export class Game {
     this.input.setSimulation(this.simulation);
     this.input.setGame(this);
     this.hud = new Hud();
+    this.hud.setOnAction((action) => this.input.performAction(action));
     this.hud.setVisible(false);
     this.minimap = new Minimap();
+    this.minimap.setOnJump((x, z) => {
+      this.renderer.cameraTarget.set(x, 0, z);
+    });
     this.minimap.setVisible(false);
     this.researchPanel = new ResearchPanel();
     this.researchPanel.setOnResearch((track) => {
@@ -61,7 +66,7 @@ export class Game {
     });
 
     this.ui = new UIManager({
-      onNewGame: (nation) => this.newGame(nation),
+      onNewGame: (nation, mapSize) => this.newGame(nation, mapSize),
       onLoadSlot: (slot) => this.loadSlot(slot),
       onSaveSlot: (slot) => this.saveSlot(slot),
       onResume: () => this.resume(),
@@ -94,12 +99,13 @@ export class Game {
     this.running = false;
   }
 
-  newGame(nation?: NationId) {
+  newGame(nation?: NationId, mapSize: MapSizeId = DEFAULT_MAP_SIZE) {
     void audio.unlock();
     audio.play('ui_confirm');
     const n = nation ?? this.ui.getProfile().preferredNation;
     this.simulation.reset();
-    this.simulation.bootstrapDemoWorld(n);
+    this.simulation.bootstrapDemoWorld(n, mapSize);
+    this.applyWorldSize();
     this.input.setSimulation(this.simulation);
     this.mode = 'playing';
     this.endRecorded = false;
@@ -122,6 +128,7 @@ export class Game {
       return;
     }
     audio.play('ui_confirm');
+    this.applyWorldSize();
     this.input.setSimulation(this.simulation);
     this.mode = 'playing';
     this.endRecorded = false;
@@ -132,6 +139,12 @@ export class Game {
     audio.setMusicDucked(false);
     audio.playMusic('music_gameplay');
     this.ui.showToast(`Loaded slot ${slot}`);
+  }
+
+  private applyWorldSize() {
+    const size = this.simulation.worldSize;
+    this.renderer.setWorldSize(size);
+    this.input.setMapHalf(size / 2);
   }
 
   saveSlot(slot: number) {
@@ -289,8 +302,16 @@ export class Game {
     this.renderer.render(this.simulation, alpha);
 
     if (this.mode === 'playing') {
-      this.hud.update(this.simulation, this.ui.getSettings().showFPS ? this.fps : undefined);
-      this.minimap.update(this.simulation, this.renderer.cameraTheta);
+      this.hud.update(
+        this.simulation,
+        this.ui.getSettings().showFPS ? this.fps : undefined,
+        this.input
+      );
+      this.minimap.update(
+        this.simulation,
+        this.renderer.cameraTheta,
+        this.renderer.cameraTarget
+      );
       this.researchPanel.update(this.simulation);
     }
 

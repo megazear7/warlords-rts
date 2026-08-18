@@ -16,6 +16,7 @@ import type {
 } from './simTypes';
 import { SimulationAI } from './simAI';
 import { NavGrid } from './pathfinding';
+import { DEFAULT_MAP_SIZE, MapSizeId, worldSizeFor } from './world';
 import { executeTrade as _executeTrade, canTrade as _canTrade, type TradeResource } from '../data/market';
 export { getExchangeRates } from '../data/market';
 export type { TradeResource, ExchangeRates, TradeResult } from '../data/market';
@@ -93,8 +94,10 @@ export class Simulation {
   aiWaveTimer = 45;
   gameOver = false;
   private ai = new SimulationAI(this);
+  mapSizeId: MapSizeId = DEFAULT_MAP_SIZE;
+  worldSize = worldSizeFor(DEFAULT_MAP_SIZE);
   /** Navigation grid for unit pathfinding. */
-  readonly navGrid = new NavGrid();
+  navGrid = new NavGrid(worldSizeFor(DEFAULT_MAP_SIZE));
 
   reset() {
     this.units.clear();
@@ -130,6 +133,17 @@ export class Simulation {
     // this.aiPhase = 'build';
     this.lastTrainComplete = false;
     this.gameOver = false;
+    this.navGrid = new NavGrid(this.worldSize);
+  }
+
+  setMapSize(id: MapSizeId) {
+    this.mapSizeId = id;
+    this.worldSize = worldSizeFor(id);
+    this.navGrid = new NavGrid(this.worldSize);
+  }
+
+  getMapHalf(): number {
+    return this.worldSize / 2;
   }
 
   getBonuses() {
@@ -207,27 +221,27 @@ export class Simulation {
     return this.exploredCells.has(`${gx},${gz}`);
   }
 
-  private markExploredAround() {
-    const mark = (pos: Vec3, radius: number) => {
-      const r = Math.ceil(radius / EXPLORED_CELL) + 1;
-      const cx = Math.floor(pos.x / EXPLORED_CELL);
-      const cz = Math.floor(pos.z / EXPLORED_CELL);
-      for (let dx = -r; dx <= r; dx++) {
-        for (let dz = -r; dz <= r; dz++) {
-          // approximate circle
-          if (dx * dx + dz * dz <= r * r) {
-            this.exploredCells.add(`${cx + dx},${cz + dz}`);
-          }
+  revealAround(pos: Vec3, radius: number) {
+    const r = Math.ceil(radius / EXPLORED_CELL) + 1;
+    const cx = Math.floor(pos.x / EXPLORED_CELL);
+    const cz = Math.floor(pos.z / EXPLORED_CELL);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (dx * dx + dz * dz <= r * r) {
+          this.exploredCells.add(`${cx + dx},${cz + dz}`);
         }
       }
-    };
+    }
+  }
+
+  private markExploredAround() {
     for (const u of this.units.values()) {
       if (u.nation !== this.playerNation || u.hp <= 0) continue;
-      mark(u.position, this.getVisionRadius(u));
+      this.revealAround(u.position, this.getVisionRadius(u));
     }
     for (const b of this.buildings.values()) {
       if (b.nation !== this.playerNation || b.hp <= 0) continue;
-      mark(b.position, this.getVisionRadius(b));
+      this.revealAround(b.position, this.getVisionRadius(b));
     }
   }
 
@@ -301,10 +315,14 @@ export class Simulation {
     return null;
   }
 
-  bootstrapDemoWorld(playerNation: NationId = 'rome') {
+  bootstrapDemoWorld(playerNation: NationId = 'rome', mapSize: MapSizeId = this.mapSizeId) {
+    this.setMapSize(mapSize);
     this.playerNation = playerNation;
     this.epochIndex = 0;
     const enemyNation: NationId = playerNation === 'gaul' ? 'rome' : 'gaul';
+    const scale = this.worldSize / 120;
+    const sx = (x: number) => x * scale;
+    const sz = (z: number) => z * scale;
 
     this.addBuilding('city_center', playerNation, { x: 0, y: 0, z: 0 }, 2000);
 
@@ -319,28 +337,38 @@ export class Simulation {
     this.spawnUnit('scout', playerNation, { x: 25, y: 0, z: 15 });
     this.spawnUnit('supply_wagon', playerNation, { x: 6, y: 0, z: -6 });
 
-    this.addBuilding('city_center', enemyNation, { x: 55, y: 0, z: -40 }, 1500);
+    const ex = sx(55);
+    const ez = sz(-40);
+    this.addBuilding('city_center', enemyNation, { x: ex, y: 0, z: ez }, 1500);
     for (let i = 0; i < 4; i++) {
       const angle = (i / 4) * Math.PI * 2;
       this.spawnUnit('enemy_warrior', enemyNation, {
-        x: 55 + Math.cos(angle) * 6,
+        x: ex + Math.cos(angle) * 6,
         y: 0,
-        z: -40 + Math.sin(angle) * 6,
+        z: ez + Math.sin(angle) * 6,
       });
     }
-    this.spawnUnit('enemy_warrior', enemyNation, { x: 48, y: 0, z: -32 });
+    this.spawnUnit('enemy_warrior', enemyNation, { x: sx(48), y: 0, z: sz(-32) });
 
-    // Reveal starting area
+    // Reveal starting area — wide enough that the opening camera shot is not a black void
     this.markExploredAround();
+    this.revealAround({ x: 0, y: 0, z: 0 }, 64);
 
     this.spawnResourceNode('food', { x: 18, y: 0, z: -12 }, 300);
     this.spawnResourceNode('food', { x: -15, y: 0, z: 20 }, 280);
     this.spawnResourceNode('timber', { x: -22, y: 0, z: -8 }, 400);
     this.spawnResourceNode('timber', { x: 30, y: 0, z: 8 }, 350);
     this.spawnResourceNode('metal', { x: 12, y: 0, z: 28 }, 200);
-    // Enemy-side resources
-    this.spawnResourceNode('food', { x: 48, y: 0, z: -28 }, 250);
-    this.spawnResourceNode('timber', { x: 62, y: 0, z: -48 }, 300);
+    this.spawnResourceNode('food', { x: sx(48), y: 0, z: sz(-28) }, 250);
+    this.spawnResourceNode('timber', { x: sx(62), y: 0, z: sz(-48) }, 300);
+
+    const extras = Math.round((scale - 1) * 2);
+    for (let i = 0; i < extras; i++) {
+      const a = (i / Math.max(1, extras)) * Math.PI * 2 + 0.4;
+      const r = this.worldSize * (0.18 + (i % 3) * 0.08);
+      const kinds: Array<'food' | 'timber' | 'metal'> = ['food', 'timber', 'metal'];
+      this.spawnResourceNode(kinds[i % 3], { x: Math.cos(a) * r, y: 0, z: Math.sin(a) * r }, 260);
+    }
 
     this.applyEpochPopCap();
   }

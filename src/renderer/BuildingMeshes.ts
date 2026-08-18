@@ -46,7 +46,7 @@ export class BuildingMeshes {
         if (ring.visible) {
           for (const child of ring.children) {
             if (child instanceof THREE.Mesh) {
-              drapeOnTerrain(child.geometry, b.position.x, b.position.z, max, 0.08);
+              drapeOnTerrain(child.geometry, b.position.x, b.position.z, max, 0.12);
             }
           }
         }
@@ -133,6 +133,8 @@ export class BuildingMeshes {
       ringGeo,
       new THREE.MeshBasicMaterial({ ...mat, opacity: 0.95 })
     );
+    fill.renderOrder = 6;
+    outline.renderOrder = 6;
     g.add(fill);
     g.add(outline);
     g.visible = false;

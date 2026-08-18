@@ -14,36 +14,215 @@
       #app { width: 100%; height: 100%; position: relative; }
       canvas { display: block; }
 
-      /* HUD */
+      /* HUD — bottom command bar */
       #hud {
-        position: absolute; top: 12px; left: 12px;
+        position: absolute;
+        left: 12px;
+        right: 250px;
+        bottom: 12px;
         color: #e8e8e8;
-        background: rgba(0, 0, 0, 0.75);
-        padding: 12px 16px;
-        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(18, 16, 12, 0.88) 0%, rgba(8, 8, 8, 0.94) 100%);
+        padding: 10px 14px 8px;
+        border-radius: 12px;
         font-size: 13px;
-        line-height: 1.55;
+        line-height: 1.4;
         pointer-events: none;
         user-select: none;
-        min-width: 280px;
-        backdrop-filter: blur(4px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(240, 192, 64, 0.18);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
         display: none;
+        flex-direction: column;
+        gap: 8px;
         z-index: 10;
+        min-height: 168px;
       }
       #hud strong { color: #f0c040; }
-      .hud-title { margin-bottom: 6px; font-size: 14px; }
+      .hud-strip {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .hud-brand {
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #f0c040;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
       .hud-resources {
-        display: flex; flex-wrap: wrap; gap: 8px 12px;
-        margin: 6px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
         font-variant-numeric: tabular-nums;
       }
-      .hud-selection { margin-top: 4px; color: #a8d4a8; }
-      .hud-research { margin-top: 4px; color: #a8c4e8; font-size: 12px; }
+      .hud-resources span {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+      .hud-meta {
+        margin-left: auto;
+        text-align: right;
+        font-size: 12px;
+        color: #c8c4b8;
+        min-width: 180px;
+      }
+      .hud-main {
+        display: flex;
+        gap: 14px;
+        align-items: stretch;
+        min-height: 108px;
+      }
+      .hud-portraits {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        flex: 1;
+        min-width: 0;
+        padding-bottom: 2px;
+      }
+      .hud-card {
+        position: relative;
+        width: 92px;
+        flex-shrink: 0;
+      }
+      .hud-card img {
+        display: block;
+        width: 92px;
+        height: 92px;
+        object-fit: cover;
+        object-position: center 18%;
+        border-radius: 8px;
+        border: 1px solid rgba(240, 192, 64, 0.5);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      }
+      .hud-card-count {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: rgba(0, 0, 0, 0.75);
+        color: #f0c040;
+        font-size: 11px;
+        font-weight: 700;
+        min-width: 18px;
+        text-align: center;
+        padding: 1px 5px;
+        border-radius: 999px;
+        border: 1px solid rgba(240, 192, 64, 0.4);
+      }
+      .hud-card-hp {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        bottom: 6px;
+        height: 5px;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .hud-card-hp > i {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #2f8a44, #6dff8a);
+        width: 100%;
+      }
+      .hud-card-hp.is-mid > i { background: linear-gradient(90deg, #8a6a12, #ffcc44); }
+      .hud-card-hp.is-low > i { background: linear-gradient(90deg, #8a1a1a, #ff5555); }
+      .hud-empty {
+        color: #777;
+        font-size: 13px;
+        align-self: center;
+        padding: 0 8px;
+      }
+      .hud-detail {
+        flex: 0 0 200px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      .hud-commands {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        gap: 6px;
+        flex: 0 1 420px;
+        max-width: 430px;
+        pointer-events: auto;
+      }
+      .hud-cmd {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+      .hud-cmd img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+        pointer-events: none;
+      }
+      .hud-cmd span {
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        bottom: 5px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-align: center;
+        color: #f6e7b4;
+        text-shadow: 0 1px 2px #000, 0 0 8px #000;
+        pointer-events: none;
+        line-height: 1.1;
+      }
+      .hud-cmd:hover:not(:disabled) {
+        filter: brightness(1.12);
+        transform: translateY(-1px);
+      }
+      .hud-cmd:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+        filter: grayscale(0.35);
+      }
+      .hud-cmd.is-active {
+        box-shadow: 0 0 0 2px #f0c040, 0 0 10px rgba(240, 192, 64, 0.45);
+      }
+      .hud-selection { color: #e8e0c8; }
+      .hud-selection .sel-name {
+        font-size: 16px;
+        font-weight: 700;
+        color: #f0c040;
+        letter-spacing: 0.02em;
+      }
+      .hud-selection .sel-sub { font-size: 12px; color: #b8b0a0; }
+      .hud-selection .sel-status { font-size: 12px; color: #9dcea0; }
+      .hud-selection .sel-status.warn { color: #ffaa55; }
+      .hud-research { color: #a8c4e8; font-size: 12px; }
       .hud-help {
-        margin-top: 10px; padding-top: 8px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        font-size: 11px; color: #999; line-height: 1.5;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 10px; color: #777; line-height: 1.45;
+      }
+      .hud-market {
+        margin-top: 4px;
+        padding: 6px 8px;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 6px;
+        font-size: 11px;
+        color: #d8c898;
       }
 
       /* UI Overlay */
@@ -139,6 +318,25 @@
         font-size: 11px;
         color: #888;
       }
+      .size-heading {
+        font-size: 14px;
+        color: #f0c040;
+        margin: 16px 0 8px;
+      }
+      .size-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .size-btn {
+        text-align: left !important;
+        padding: 10px 12px !important;
+      }
+      .size-btn.selected {
+        border-color: #f0c040 !important;
+        background: rgba(240, 192, 64, 0.12) !important;
+      }
 
       .settings-panel label {
         display: flex;
@@ -183,7 +381,7 @@
       /* Toast */
       #toast {
         position: absolute;
-        bottom: 28px;
+        bottom: 210px;
         left: 50%;
         transform: translateX(-50%) translateY(20px);
         background: rgba(0, 0, 0, 0.85);

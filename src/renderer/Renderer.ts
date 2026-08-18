@@ -12,7 +12,7 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
 
-  readonly terrain: THREE.Mesh;
+  terrain: THREE.Mesh;
   private unitMeshes: UnitMeshes;
   private buildingMeshes: BuildingMeshes;
   private resourceMeshes: ResourceMeshes;
@@ -61,16 +61,26 @@ export class Renderer {
     sun.shadow.camera.bottom = -80;
     this.scene.add(sun);
 
-    this.terrain = createTerrain();
+    this.terrain = createTerrain(360);
     this.scene.add(this.terrain);
 
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);
     this.resourceMeshes = new ResourceMeshes(this.scene);
     this.territoryMeshes = new TerritoryMeshes(this.scene);
-    this.fogMeshes = new FogMeshes(this.scene);
+    this.fogMeshes = new FogMeshes(this.scene, 360);
 
     window.addEventListener('resize', () => this.onResize(container));
+  }
+
+  setWorldSize(size: number) {
+    this.scene.remove(this.terrain);
+    this.terrain.geometry.dispose();
+    (this.terrain.material as THREE.Material).dispose();
+    this.terrain = createTerrain(size);
+    this.scene.add(this.terrain);
+    this.fogMeshes.setWorldSize(size);
+    this.cameraTarget.set(0, 0, 0);
   }
 
   private onResize(container: HTMLElement) {

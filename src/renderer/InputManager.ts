@@ -8,6 +8,43 @@ import { getTerrainHeight } from './Terrain';
 
 const EDGE_MARGIN = 28;
 
+const CAMERA_KEYS = new Set([
+  'KeyW',
+  'KeyA',
+  'KeyS',
+  'KeyD',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+]);
+
+function isCameraKey(code: string): boolean {
+  return CAMERA_KEYS.has(code);
+}
+
+export type HudAction =
+  | 'attack-move'
+  | 'found-city'
+  | 'build-farm'
+  | 'build-barracks'
+  | 'build-library'
+  | 'build-tower'
+  | 'build-market'
+  | 'build-wall'
+  | 'train-citizen'
+  | 'train-scout'
+  | 'train-infantry'
+  | 'train-elite'
+  | 'train-wagon'
+  | 'train-general'
+  | 'trade-sell-food'
+  | 'trade-buy-metal'
+  | 'trade-sell-timber'
+  | 'trade-buy-timber'
+  | 'research'
+  | 'epoch';
+
 export class InputManager {
   private renderer: Renderer;
   private simulation: Simulation | null = null;
@@ -39,6 +76,8 @@ export class InputManager {
   /** Double-tap detection for control groups */
   private lastGroupKeyTime = 0;
   private lastGroupKeySlot = -1;
+  private readonly heldKeys = new Set<string>();
+  private mapHalf = 180;
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -150,6 +189,13 @@ export class InputManager {
       }
 
       if (!this.isGameplay() || !this.simulation) return;
+
+      if (isCameraKey(e.code)) {
+        this.heldKeys.add(e.code);
+        e.preventDefault();
+        return;
+      }
+
       const sim = this.simulation;
 
       const digitMatch = e.code.match(/^Digit(\d)$/);
@@ -181,95 +227,56 @@ export class InputManager {
       }
 
       switch (e.code) {
-        case 'KeyA':
-          this.attackMoveMode = true;
-          this.game?.ui.showToast('Attack-move: right-click destination');
-          break;
         case 'KeyF':
-          if (sim.tryBuildFarm()) audio.play('build_place');
+          this.performAction('build-farm');
           break;
         case 'KeyB':
-          if (sim.tryBuildBarracks()) audio.play('build_place');
+          this.performAction('build-barracks');
           break;
         case 'KeyL':
-          if (sim.tryBuildLibrary()) audio.play('build_place');
+          this.performAction('build-library');
           break;
         case 'KeyY':
-          if (sim.tryBuildTower()) audio.play('build_place');
-          else this.game?.ui.showToast('Need Military research 1+ · select citizens · 80 timber, 30 wealth');
+          this.performAction('build-tower');
           break;
         case 'KeyM':
-          if (sim.tryBuildMarket()) audio.play('build_place');
-          else this.game?.ui.showToast('Need Commerce research 1+ · select citizens · 70 timber, 25 wealth');
+          this.performAction('build-market');
           break;
         case 'KeyH':
-          if (sim.tryBuildWall()) audio.play('build_place');
-          else this.game?.ui.showToast('Need Military research 2+ · select citizens · 40 timber, 20 wealth');
+          this.performAction('build-wall');
           break;
         case 'KeyU':
-          if (sim.executeTrade('food', 'wealth', 50)) this.game?.ui.showToast('Sold 50 food for wealth');
-          else this.game?.ui.showToast(sim.checkTrade('food', 'wealth', 50) ?? 'Trade failed');
+          this.performAction('trade-sell-food');
           break;
         case 'KeyI':
-          if (sim.executeTrade('wealth', 'metal', 20)) this.game?.ui.showToast('Bought 20 metal');
-          else this.game?.ui.showToast(sim.checkTrade('wealth', 'metal', 20) ?? 'Trade failed');
+          this.performAction('trade-buy-metal');
           break;
         case 'KeyO':
-          if (sim.executeTrade('timber', 'wealth', 50)) this.game?.ui.showToast('Sold 50 timber for wealth');
-          else this.game?.ui.showToast(sim.checkTrade('timber', 'wealth', 50) ?? 'Trade failed');
+          this.performAction('trade-sell-timber');
           break;
         case 'KeyP':
-          if (sim.executeTrade('wealth', 'timber', 50)) this.game?.ui.showToast('Bought 50 timber');
-          else this.game?.ui.showToast(sim.checkTrade('wealth', 'timber', 50) ?? 'Trade failed');
+          this.performAction('trade-buy-timber');
           break;
         case 'KeyV':
-          if (!sim.tryTrainCitizen()) {
-            this.game?.ui.showToast('Select city center · costs 50 food');
-          }
+          this.performAction('train-citizen');
           break;
         case 'KeyT':
-          sim.tryTrainLegionary();
+          this.performAction('train-infantry');
           break;
         case 'KeyR':
-          if (!sim.tryTrainElite()) this.game?.ui.showToast('Elite unit locked (advance epoch)');
+          this.performAction('train-elite');
           break;
         case 'KeyQ':
-          sim.tryTrainScout();
-          break;
-        case 'KeyW':
-          sim.tryTrainSupplyWagon();
+          this.performAction('train-scout');
           break;
         case 'KeyG':
-          if (!sim.tryTrainGeneral()) {
-            this.game?.ui.showToast('Select barracks · needs Military research 1+ · max 2 generals');
-          } else {
-            this.game?.ui.showToast('Training General (aura: +25% attack, +12% speed)');
-          }
+          this.performAction('train-general');
           break;
         case 'KeyC':
-          if (this.foundCityMode) {
-            this.foundCityMode = false;
-            this.game?.ui.showToast('Found-city mode canceled');
-            break;
-          }
-          {
-            const reason = sim.getCityFoundingPrecheckFailure();
-            if (reason) {
-              this.game?.ui.showToast(reason);
-            } else {
-              this.foundCityMode = true;
-              this.game?.ui.showToast('Found-city mode: right-click valid open ground');
-            }
-          }
+          this.performAction('found-city');
           break;
-        case 'KeyE': {
-          const ok = sim.tryAdvanceEpoch();
-          if (ok) this.game?.ui.showToast(`Epoch: ${sim.getCurrentEpochName()}`);
-          else this.game?.ui.showToast('Cannot advance epoch (cost or max)');
-          break;
-        }
-        case 'KeyS':
-          if (!e.ctrlKey) this.game?.saveSlot(1);
+        case 'KeyE':
+          this.performAction('epoch');
           break;
         case 'F1': {
           const reason1 = sim.canTryResearch('science');
@@ -293,6 +300,114 @@ export class InputManager {
         }
       }
     });
+
+    window.addEventListener('keyup', (e) => {
+      this.heldKeys.delete(e.code);
+    });
+    window.addEventListener('blur', () => this.heldKeys.clear());
+  }
+
+  isAttackMoveMode(): boolean {
+    return this.attackMoveMode;
+  }
+
+  isFoundCityMode(): boolean {
+    return this.foundCityMode;
+  }
+
+  performAction(action: HudAction) {
+    if (!this.isGameplay() || !this.simulation) return;
+    const sim = this.simulation;
+
+    switch (action) {
+      case 'attack-move':
+        this.attackMoveMode = true;
+        this.game?.ui.showToast('Attack-move: right-click destination');
+        break;
+      case 'found-city':
+        if (this.foundCityMode) {
+          this.foundCityMode = false;
+          this.game?.ui.showToast('Found-city mode canceled');
+          break;
+        }
+        {
+          const reason = sim.getCityFoundingPrecheckFailure();
+          if (reason) this.game?.ui.showToast(reason);
+          else {
+            this.foundCityMode = true;
+            this.game?.ui.showToast('Found-city mode: right-click valid open ground');
+          }
+        }
+        break;
+      case 'build-farm':
+        if (sim.tryBuildFarm()) audio.play('build_place');
+        break;
+      case 'build-barracks':
+        if (sim.tryBuildBarracks()) audio.play('build_place');
+        break;
+      case 'build-library':
+        if (sim.tryBuildLibrary()) audio.play('build_place');
+        break;
+      case 'build-tower':
+        if (sim.tryBuildTower()) audio.play('build_place');
+        else this.game?.ui.showToast('Need Military research 1+ · select citizens · 80 timber, 30 wealth');
+        break;
+      case 'build-market':
+        if (sim.tryBuildMarket()) audio.play('build_place');
+        else this.game?.ui.showToast('Need Commerce research 1+ · select citizens · 70 timber, 25 wealth');
+        break;
+      case 'build-wall':
+        if (sim.tryBuildWall()) audio.play('build_place');
+        else this.game?.ui.showToast('Need Military research 2+ · select citizens · 40 timber, 20 wealth');
+        break;
+      case 'train-citizen':
+        if (!sim.tryTrainCitizen()) this.game?.ui.showToast('Select city center · costs 50 food');
+        break;
+      case 'train-infantry':
+        sim.tryTrainLegionary();
+        break;
+      case 'train-elite':
+        if (!sim.tryTrainElite()) this.game?.ui.showToast('Elite unit locked (advance epoch)');
+        break;
+      case 'train-scout':
+        sim.tryTrainScout();
+        break;
+      case 'train-wagon':
+        sim.tryTrainSupplyWagon();
+        break;
+      case 'train-general':
+        if (!sim.tryTrainGeneral()) {
+          this.game?.ui.showToast('Select barracks · needs Military research 1+ · max 2 generals');
+        } else {
+          this.game?.ui.showToast('Training General (aura: +25% attack, +12% speed)');
+        }
+        break;
+      case 'trade-sell-food':
+        if (sim.executeTrade('food', 'wealth', 50)) this.game?.ui.showToast('Sold 50 food for wealth');
+        else this.game?.ui.showToast(sim.checkTrade('food', 'wealth', 50) ?? 'Trade failed');
+        break;
+      case 'trade-buy-metal':
+        if (sim.executeTrade('wealth', 'metal', 20)) this.game?.ui.showToast('Bought 20 metal');
+        else this.game?.ui.showToast(sim.checkTrade('wealth', 'metal', 20) ?? 'Trade failed');
+        break;
+      case 'trade-sell-timber':
+        if (sim.executeTrade('timber', 'wealth', 50)) this.game?.ui.showToast('Sold 50 timber for wealth');
+        else this.game?.ui.showToast(sim.checkTrade('timber', 'wealth', 50) ?? 'Trade failed');
+        break;
+      case 'trade-buy-timber':
+        if (sim.executeTrade('wealth', 'timber', 50)) this.game?.ui.showToast('Bought 50 timber');
+        else this.game?.ui.showToast(sim.checkTrade('wealth', 'timber', 50) ?? 'Trade failed');
+        break;
+      case 'research':
+        this.game?.researchPanel.toggle();
+        break;
+      case 'epoch': {
+        const ok = sim.tryAdvanceEpoch();
+        if (ok) this.game?.ui.showToast(`Epoch: ${sim.getCurrentEpochName()}`);
+        else this.game?.ui.showToast('Cannot advance epoch (cost or max)');
+        break;
+      }
+    }
   }
 
   setSimulation(sim: Simulation) {
@@ -315,25 +430,42 @@ export class InputManager {
     this.edgeScroll = enabled;
   }
 
+  setMapHalf(half: number) {
+    this.mapHalf = half;
+  }
+
   /** Call each frame while playing */
   updateEdgeScroll(dt: number) {
-    if (!this.edgeScroll || !this.isGameplay()) return;
+    if (!this.isGameplay()) return;
     if (this.isLeftDown || this.isRightDown || this.isBoxSelecting) return;
 
-    const w = window.innerWidth;
-    const h = window.innerHeight;
     let dx = 0;
     let dy = 0;
-    // pan() treats +dx as camera-left; invert so the view follows the cursor.
-    if (this.mouseX < EDGE_MARGIN) dx = 1;
-    else if (this.mouseX > w - EDGE_MARGIN) dx = -1;
-    // Screen Y grows downward; pan() treats +dy as "into the view" (top of screen).
-    if (this.mouseY < EDGE_MARGIN) dy = 1;
-    else if (this.mouseY > h - EDGE_MARGIN) dy = -1;
-    if (dx === 0 && dy === 0) return;
 
+    if (this.heldKeys.has('KeyA') || this.heldKeys.has('ArrowLeft')) dx += 1;
+    if (this.heldKeys.has('KeyD') || this.heldKeys.has('ArrowRight')) dx -= 1;
+    if (this.heldKeys.has('KeyW') || this.heldKeys.has('ArrowUp')) dy += 1;
+    if (this.heldKeys.has('KeyS') || this.heldKeys.has('ArrowDown')) dy -= 1;
+
+    if (this.edgeScroll && !this.isOverCommandButtons()) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      // pan() treats +dx as camera-left; invert so the view follows the cursor.
+      if (this.mouseX < EDGE_MARGIN) dx += 1;
+      else if (this.mouseX > w - EDGE_MARGIN) dx -= 1;
+      // Screen Y grows downward; pan() treats +dy as "into the view" (top of screen).
+      if (this.mouseY < EDGE_MARGIN) dy += 1;
+      else if (this.mouseY > h - EDGE_MARGIN) dy -= 1;
+    }
+
+    if (dx === 0 && dy === 0) return;
     const pixels = 420 * dt * this.panMul;
     this.pan(dx * pixels, dy * pixels);
+  }
+
+  private isOverCommandButtons(): boolean {
+    const el = document.elementFromPoint(this.mouseX, this.mouseY);
+    return !!el?.closest('.hud-commands');
   }
 
   private isGameplay(): boolean {
@@ -520,6 +652,8 @@ export class InputManager {
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     r.cameraTarget.addScaledVector(right, -dx * speed);
     r.cameraTarget.addScaledVector(forward, dy * speed);
+    r.cameraTarget.x = THREE.MathUtils.clamp(r.cameraTarget.x, -this.mapHalf, this.mapHalf);
+    r.cameraTarget.z = THREE.MathUtils.clamp(r.cameraTarget.z, -this.mapHalf, this.mapHalf);
   }
 
   private orbit(dx: number, dy: number) {

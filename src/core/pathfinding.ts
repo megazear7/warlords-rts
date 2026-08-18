@@ -1,7 +1,7 @@
 /**
  * pathfinding.ts — Uniform-grid A* for Warlords RTS.
  *
- * Cell size: CELL (3 world units).  Map extents: ±MAP_HALF (60 wu).
+ * Cell size: CELL (3 world units).  Map extents come from the chosen world size.
  * Blocked cells are set from building footprints.  A* is capped at
  * MAX_NODES explored nodes to avoid frame stalls with large open maps.
  *
@@ -17,9 +17,7 @@ import type { Vec3 } from './math';
 import type { Building } from './simTypes';
 
 export const CELL = 3;              // world units per grid cell
-export const MAP_HALF = 60;         // half-extent of playable map
-const GRID_N = Math.ceil((MAP_HALF * 2) / CELL); // cells per axis
-const MAX_NODES = 2000;             // A* node cap per path query
+export const DEFAULT_MAP_HALF = 180; // small map (360 wide)
 
 // Building-type footprint radii (half-side of axis-aligned square blocker)
 const BUILDING_RADIUS: Record<string, number> = {
@@ -35,29 +33,39 @@ const DEFAULT_RADIUS = 3.0;
 
 // ---------- helpers ----------------------------------------------------------
 
-function worldToCell(w: number): number {
-  return Math.floor((w + MAP_HALF) / CELL);
-}
 
-function cellToWorld(c: number): number {
-  return c * CELL - MAP_HALF + CELL * 0.5;
-}
-
-function clampCell(c: number): number {
-  return Math.max(0, Math.min(GRID_N - 1, c));
-}
-
-// Flat index into a GRID_N × GRID_N array
-function idx(cx: number, cz: number): number {
-  return cz * GRID_N + cx;
-}
 
 // ---------- NavGrid ----------------------------------------------------------
 
 export class NavGrid {
+  readonly mapHalf: number;
+  readonly gridN: number;
+  private readonly maxNodes: number;
   /** Number of times each cell is blocked (supports overlapping buildings) */
-  private blocked: Uint8Array = new Uint8Array(GRID_N * GRID_N);
-  /** Dirty flag: rebuild hints are ignored — we update incrementally. */
+  private blocked: Uint8Array;
+
+  constructor(worldSize = DEFAULT_MAP_HALF * 2) {
+    this.mapHalf = worldSize / 2;
+    this.gridN = Math.ceil(worldSize / CELL);
+    this.maxNodes = Math.min(12000, Math.max(2000, this.gridN * 18));
+    this.blocked = new Uint8Array(this.gridN * this.gridN);
+  }
+
+  private worldToCell(w: number): number {
+    return Math.floor((w + this.mapHalf) / CELL);
+  }
+
+  private cellToWorld(c: number): number {
+    return c * CELL - this.mapHalf + CELL * 0.5;
+  }
+
+  private clampCell(c: number): number {
+    return Math.max(0, Math.min(this.gridN - 1, c));
+  }
+
+  private i(cx: number, cz: number): number {
+    return cz * this.gridN + cx;
+  }
 
   /** Mark cells covered by a building as blocked. */
   markBuilding(b: Building) {
@@ -71,13 +79,13 @@ export class NavGrid {
 
   private _adjustBuilding(b: Building, delta: 1 | -1) {
     const r = BUILDING_RADIUS[b.type] ?? DEFAULT_RADIUS;
-    const minCx = clampCell(worldToCell(b.position.x - r));
-    const maxCx = clampCell(worldToCell(b.position.x + r));
-    const minCz = clampCell(worldToCell(b.position.z - r));
-    const maxCz = clampCell(worldToCell(b.position.z + r));
+    const minCx = this.clampCell(this.worldToCell(b.position.x - r));
+    const maxCx = this.clampCell(this.worldToCell(b.position.x + r));
+    const minCz = this.clampCell(this.worldToCell(b.position.z - r));
+    const maxCz = this.clampCell(this.worldToCell(b.position.z + r));
     for (let cz = minCz; cz <= maxCz; cz++) {
       for (let cx = minCx; cx <= maxCx; cx++) {
-        const i = idx(cx, cz);
+        const i = this.i(cx, cz);
         const v = this.blocked[i] + delta;
         this.blocked[i] = Math.max(0, Math.min(255, v)) as number;
       }
@@ -85,18 +93,18 @@ export class NavGrid {
   }
 
   isBlocked(cx: number, cz: number): boolean {
-    if (cx < 0 || cz < 0 || cx >= GRID_N || cz >= GRID_N) return true;
-    return this.blocked[idx(cx, cz)] > 0;
+    if (cx < 0 || cz < 0 || cx >= this.gridN || cz >= this.gridN) return true;
+    return this.blocked[this.i(cx, cz)] > 0;
   }
 
   /** True when a building footprint can be placed on open cells within map bounds. */
   canPlaceBuilding(type: string, position: Vec3): boolean {
     const r = BUILDING_RADIUS[type] ?? DEFAULT_RADIUS;
-    const minCx = worldToCell(position.x - r);
-    const maxCx = worldToCell(position.x + r);
-    const minCz = worldToCell(position.z - r);
-    const maxCz = worldToCell(position.z + r);
-    if (minCx < 0 || minCz < 0 || maxCx >= GRID_N || maxCz >= GRID_N) return false;
+    const minCx = this.worldToCell(position.x - r);
+    const maxCx = this.worldToCell(position.x + r);
+    const minCz = this.worldToCell(position.z - r);
+    const maxCz = this.worldToCell(position.z + r);
+    if (minCx < 0 || minCz < 0 || maxCx >= this.gridN || maxCz >= this.gridN) return false;
     for (let cz = minCz; cz <= maxCz; cz++) {
       for (let cx = minCx; cx <= maxCx; cx++) {
         if (this.isBlocked(cx, cz)) return false;
@@ -114,10 +122,10 @@ export class NavGrid {
    * can use Array.pop() for O(1) advancement.
    */
   findPath(from: Vec3, to: Vec3): Vec3[] {
-    const sx = clampCell(worldToCell(from.x));
-    const sz = clampCell(worldToCell(from.z));
-    const gx = clampCell(worldToCell(to.x));
-    const gz = clampCell(worldToCell(to.z));
+    const sx = this.clampCell(this.worldToCell(from.x));
+    const sz = this.clampCell(this.worldToCell(from.z));
+    const gx = this.clampCell(this.worldToCell(to.x));
+    const gz = this.clampCell(this.worldToCell(to.z));
 
     // Same cell — no path needed
     if (sx === gx && sz === gz) return [];
@@ -131,27 +139,27 @@ export class NavGrid {
     }
 
     // A* with binary min-heap open set
-    const gScore = new Float32Array(GRID_N * GRID_N).fill(Infinity);
-    const fScore = new Float32Array(GRID_N * GRID_N).fill(Infinity);
-    const cameFrom = new Int32Array(GRID_N * GRID_N).fill(-1);
+    const gScore = new Float32Array(this.gridN * this.gridN).fill(Infinity);
+    const fScore = new Float32Array(this.gridN * this.gridN).fill(Infinity);
+    const cameFrom = new Int32Array(this.gridN * this.gridN).fill(-1);
 
-    const startIdx = idx(sx, sz);
+    const startIdx = this.i(sx, sz);
     gScore[startIdx] = 0;
     fScore[startIdx] = this._h(sx, sz, tx, tz);
 
     // Binary min-heap: each element is [f, flatIndex]
     const heap: [number, number][] = [[fScore[startIdx], startIdx]];
-    const inOpen = new Uint8Array(GRID_N * GRID_N);
+    const inOpen = new Uint8Array(this.gridN * this.gridN);
     inOpen[startIdx] = 1;
 
     let nodesVisited = 0;
 
-    while (heap.length > 0 && nodesVisited < MAX_NODES) {
+    while (heap.length > 0 && nodesVisited < this.maxNodes) {
       const [, curIdx] = this._heapPop(heap);
       nodesVisited++;
 
-      const cx = curIdx % GRID_N;
-      const cz = Math.floor(curIdx / GRID_N);
+      const cx = curIdx % this.gridN;
+      const cz = Math.floor(curIdx / this.gridN);
       inOpen[curIdx] = 0;
 
       if (cx === tx && cz === tz) {
@@ -164,14 +172,14 @@ export class NavGrid {
           if (dx === 0 && dz === 0) continue;
           const nx = cx + dx;
           const nz = cz + dz;
-          if (nx < 0 || nz < 0 || nx >= GRID_N || nz >= GRID_N) continue;
+          if (nx < 0 || nz < 0 || nx >= this.gridN || nz >= this.gridN) continue;
           if (this.isBlocked(nx, nz)) continue;
           // Diagonal: check both orthogonal neighbors to avoid cutting corners
           if (dx !== 0 && dz !== 0) {
             if (this.isBlocked(cx + dx, cz) || this.isBlocked(cx, cz + dz)) continue;
           }
           const moveCost = dx !== 0 && dz !== 0 ? 1.414 : 1.0;
-          const nIdx = idx(nx, nz);
+          const nIdx = this.i(nx, nz);
           const tentativeG = gScore[curIdx] + moveCost;
           if (tentativeG < gScore[nIdx]) {
             cameFrom[nIdx] = curIdx;
@@ -239,19 +247,19 @@ export class NavGrid {
     exactTarget: Vec3
   ): Vec3[] {
     const cells: [number, number][] = [];
-    let cur = idx(tx, tz);
+    let cur = this.i(tx, tz);
     while (cur !== -1) {
-      const cx = cur % GRID_N;
-      const cz = Math.floor(cur / GRID_N);
+      const cx = cur % this.gridN;
+      const cz = Math.floor(cur / this.gridN);
       cells.push([cx, cz]);
       cur = cameFrom[cur];
     }
     cells.reverse();
     // Skip first cell (start position)
     const waypoints: Vec3[] = cells.slice(1).map(([cx, cz]) => ({
-      x: cellToWorld(cx),
+      x: this.cellToWorld(cx),
       y: 0,
-      z: cellToWorld(cz),
+      z: this.cellToWorld(cz),
     }));
     // Replace last waypoint with the exact target position
     if (waypoints.length > 0) {
@@ -293,7 +301,7 @@ export class NavGrid {
         for (let dx = -r; dx <= r; dx++) {
           if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
           const nx = cx + dx, nz = cz + dz;
-          if (nx < 0 || nz < 0 || nx >= GRID_N || nz >= GRID_N) continue;
+          if (nx < 0 || nz < 0 || nx >= this.gridN || nz >= this.gridN) continue;
           if (!this.isBlocked(nx, nz)) return [nx, nz];
         }
       }

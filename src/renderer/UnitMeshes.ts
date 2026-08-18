@@ -50,7 +50,7 @@ export class UnitMeshes {
         if (selected) {
           const mat = ring.material as THREE.MeshBasicMaterial;
           mat.color.setHex(unit.underAttrition ? 0xffaa33 : 0x44ff88);
-          drapeOnTerrain(ring.geometry, unit.position.x, unit.position.z, groundY, 0.08);
+          drapeOnTerrain(ring.geometry, unit.position.x, unit.position.z, groundY, 0.12);
         }
       }
 
@@ -233,6 +233,7 @@ export class UnitMeshes {
       })
     );
     ring.visible = false;
+    ring.renderOrder = 6;
     group.add(ring);
 
     const hpBar = new THREE.Mesh(

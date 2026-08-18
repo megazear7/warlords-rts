@@ -2,7 +2,6 @@ import { Simulation } from '../core/Simulation';
 import { NATIONS, NationId } from '../data/nations';
 
 const SIZE = 160;
-const WORLD = 120; // matches terrain half-extent-ish
 const FRAME = Math.ceil(SIZE * Math.SQRT2);
 
 export class Minimap {
@@ -10,6 +9,9 @@ export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
+  private lastTheta = Math.PI / 4;
+  private lastWorld = 360;
+  private onJump: ((x: number, z: number) => void) | null = null;
 
   constructor() {
     this.root = document.createElement('div');
@@ -33,10 +35,47 @@ export class Minimap {
       border: 1px solid rgba(255,255,255,0.15);
       background: rgba(0,0,0,0.55);
       transform-origin: center center;
+      pointer-events: auto;
+      cursor: pointer;
     `;
     this.root.appendChild(this.canvas);
     document.getElementById('app')?.appendChild(this.root);
     this.ctx = this.canvas.getContext('2d')!;
+
+    const jump = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const world = this.clientToWorld(e.clientX, e.clientY);
+      if (world) this.onJump?.(world.x, world.z);
+    };
+    this.canvas.addEventListener('pointerdown', jump);
+  }
+
+  setOnJump(cb: (x: number, z: number) => void) {
+    this.onJump = cb;
+  }
+
+  private clientToWorld(clientX: number, clientY: number): { x: number; z: number } | null {
+    const rootRect = this.root.getBoundingClientRect();
+    const cx = rootRect.left + rootRect.width / 2;
+    const cy = rootRect.top + rootRect.height / 2;
+    const lx = clientX - cx;
+    const ly = clientY - cy;
+    const theta = this.lastTheta;
+    const c = Math.cos(-theta);
+    const s = Math.sin(-theta);
+    const rx = lx * c - ly * s;
+    const ry = lx * s + ly * c;
+    const px = rx + SIZE / 2;
+    const py = ry + SIZE / 2;
+    if (px < 0 || py < 0 || px > SIZE || py > SIZE) return null;
+    const half = this.lastWorld / 2;
+    const x = (px / SIZE) * this.lastWorld - half;
+    const z = (py / SIZE) * this.lastWorld - half;
+    return {
+      x: Math.max(-half, Math.min(half, x)),
+      z: Math.max(-half, Math.min(half, z)),
+    };
   }
 
   setVisible(v: boolean) {
@@ -44,11 +83,18 @@ export class Minimap {
     this.root.style.display = v ? 'flex' : 'none';
   }
 
-  update(sim: Simulation, cameraTheta = Math.PI / 4) {
+  update(
+    sim: Simulation,
+    cameraTheta = Math.PI / 4,
+    cameraTarget?: { x: number; z: number }
+  ) {
     if (!this.visible) return;
+    this.lastTheta = cameraTheta;
+    this.lastWorld = sim.worldSize;
     this.canvas.style.transform = `rotate(${cameraTheta}rad)`;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, SIZE, SIZE);
+    const WORLD = sim.worldSize;
 
     const toXY = (x: number, z: number) => ({
       px: ((x + WORLD / 2) / WORLD) * SIZE,
@@ -118,6 +164,13 @@ export class Minimap {
       ctx.beginPath();
       ctx.arc(px, py, isPlayer ? 2.2 : 2, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (cameraTarget) {
+      const { px, py } = toXY(cameraTarget.x, cameraTarget.z);
+      ctx.strokeStyle = '#f0c040';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(px - 5, py - 5, 10, 10);
     }
   }
 }

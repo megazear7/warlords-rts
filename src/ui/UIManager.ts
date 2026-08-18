@@ -2,6 +2,7 @@ import { SaveSystem, SAVE_SLOTS } from '../core/SaveSystem';
 import { SettingsStore, GameSettings, DEFAULT_SETTINGS } from '../core/Settings';
 import { ProfileStore, PlayerProfile } from '../core/Profile';
 import { NationId, NATIONS } from '../data/nations';
+import { DEFAULT_MAP_SIZE, MAP_SIZE_ORDER, MAP_SIZES, MapSizeId } from '../core/world';
 import { audio } from '../audio/AudioManager';
 
 export type UIScreen =
@@ -17,7 +18,7 @@ export type UIScreen =
   | 'none';
 
 export interface UICallbacks {
-  onNewGame: (nation?: NationId) => void;
+  onNewGame: (nation?: NationId, mapSize?: MapSizeId) => void;
   onLoadSlot: (slot: number) => void;
   onSaveSlot: (slot: number) => void;
   onResume: () => void;
@@ -34,6 +35,7 @@ export class UIManager {
   private toastEl: HTMLElement;
   private toastTimer = 0;
   private returnTo: UIScreen = 'main';
+  private pendingMapSize: MapSizeId = DEFAULT_MAP_SIZE;
 
   constructor(callbacks: UICallbacks) {
     this.callbacks = callbacks;
@@ -158,10 +160,21 @@ export class UIManager {
       })
       .join('');
 
+    const sizes = MAP_SIZE_ORDER.map((id) => {
+      const s = MAP_SIZES[id];
+      const sel = id === this.pendingMapSize ? ' selected' : '';
+      return `<button type="button" class="size-btn${sel}" data-action="size-${id}">
+        <strong>${s.label}</strong>
+        <span class="slot-meta">${s.hint}</span>
+      </button>`;
+    }).join('');
+
     this.root.innerHTML = `
       <div class="menu-panel">
         <h2>Choose Nation</h2>
         <div class="slot-list">${cards}</div>
+        <h3 class="size-heading">Map Size</h3>
+        <div class="size-row">${sizes}</div>
         <button data-action="back" class="secondary">Back</button>
       </div>
     `;
@@ -169,8 +182,14 @@ export class UIManager {
     const actions: Record<string, () => void> = {
       back: () => this.show('main'),
     };
+    for (const id of MAP_SIZE_ORDER) {
+      actions[`size-${id}`] = () => {
+        this.pendingMapSize = id;
+        this.renderNationSelect();
+      };
+    }
     for (const id of Object.keys(NATIONS) as NationId[]) {
-      actions[`pick-${id}`] = () => this.callbacks.onNewGame(id);
+      actions[`pick-${id}`] = () => this.callbacks.onNewGame(id, this.pendingMapSize);
     }
     this.bind(this.root, actions);
   }
