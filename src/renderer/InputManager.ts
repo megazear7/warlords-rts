@@ -4,6 +4,7 @@ import { Simulation } from '../core/Simulation';
 import { EntityId } from '../core/types';
 import type { Game } from '../Game';
 import { audio } from '../audio/AudioManager';
+import { getTerrainHeight } from './Terrain';
 
 const EDGE_MARGIN = 28;
 
@@ -323,10 +324,12 @@ export class InputManager {
     const h = window.innerHeight;
     let dx = 0;
     let dy = 0;
-    if (this.mouseX < EDGE_MARGIN) dx = -1;
-    else if (this.mouseX > w - EDGE_MARGIN) dx = 1;
-    if (this.mouseY < EDGE_MARGIN) dy = -1;
-    else if (this.mouseY > h - EDGE_MARGIN) dy = 1;
+    // pan() treats +dx as camera-left; invert so the view follows the cursor.
+    if (this.mouseX < EDGE_MARGIN) dx = 1;
+    else if (this.mouseX > w - EDGE_MARGIN) dx = -1;
+    // Screen Y grows downward; pan() treats +dy as "into the view" (top of screen).
+    if (this.mouseY < EDGE_MARGIN) dy = 1;
+    else if (this.mouseY > h - EDGE_MARGIN) dy = -1;
     if (dx === 0 && dy === 0) return;
 
     const pixels = 420 * dt * this.panMul;
@@ -358,7 +361,11 @@ export class InputManager {
     const rect = this.renderer.domElement.getBoundingClientRect();
     for (const unit of this.simulation.getAllUnits()) {
       if (unit.nation !== this.simulation.playerNation) continue;
-      const pos = new THREE.Vector3(unit.position.x, 1.0, unit.position.z);
+      const pos = new THREE.Vector3(
+        unit.position.x,
+        getTerrainHeight(unit.position.x, unit.position.z) + 1,
+        unit.position.z
+      );
       pos.project(cam);
       const sx = ((pos.x + 1) / 2) * rect.width + rect.left;
       const sy = ((-pos.y + 1) / 2) * rect.height + rect.top;
@@ -490,6 +497,8 @@ export class InputManager {
   private raycastGround(clientX: number, clientY: number): THREE.Vector3 | null {
     this.updateMouseNDC(clientX, clientY);
     this.raycaster.setFromCamera(this.mouse, this.renderer.camera);
+    const hits = this.raycaster.intersectObject(this.renderer.terrain, false);
+    if (hits.length > 0) return hits[0].point;
     const target = new THREE.Vector3();
     return this.raycaster.ray.intersectPlane(this.groundPlane, target) ? target : null;
   }

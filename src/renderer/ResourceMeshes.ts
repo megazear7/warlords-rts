@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ResourceNode } from '../core/Simulation';
+import { getTerrainHeight } from './Terrain';
 
 /**
  * Visual representation of resource nodes (food bushes, trees, mines).
@@ -26,7 +27,11 @@ export class ResourceMeshes {
         this.group.add(mesh);
       }
 
-      mesh.position.set(node.position.x, 0, node.position.z);
+      mesh.position.set(
+        node.position.x,
+        getTerrainHeight(node.position.x, node.position.z),
+        node.position.z
+      );
 
       // Scale down slightly as it depletes
       const ratio = node.amount / node.maxAmount;

@@ -12,6 +12,7 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
 
+  readonly terrain: THREE.Mesh;
   private unitMeshes: UnitMeshes;
   private buildingMeshes: BuildingMeshes;
   private resourceMeshes: ResourceMeshes;
@@ -60,7 +61,8 @@ export class Renderer {
     sun.shadow.camera.bottom = -80;
     this.scene.add(sun);
 
-    this.scene.add(createTerrain());
+    this.terrain = createTerrain();
+    this.scene.add(this.terrain);
 
     this.unitMeshes = new UnitMeshes(this.scene);
     this.buildingMeshes = new BuildingMeshes(this.scene);

@@ -1,5 +1,54 @@
 import * as THREE from 'three';
 
+/** Matches the procedural terrain mesh. Simulation stays on XZ; visuals sample this. */
+export function getTerrainHeight(x: number, z: number): number {
+  const n1 = Math.sin(x * 0.07) * Math.cos(z * 0.09) * 2.2;
+  const n2 = Math.sin(x * 0.19 + 1.7) * Math.cos(z * 0.15) * 0.9;
+  const n3 = Math.sin(x * 0.41) * Math.sin(z * 0.37) * 0.35;
+  const h = n1 + n2 + n3;
+  const dist = Math.hypot(x, z);
+  const flatten = Math.max(0, 1 - dist / 28);
+  return h * (1 - flatten * 0.85);
+}
+
+export function sampleTerrainHeightRange(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  steps = 6
+): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const px = x + (i / steps - 0.5) * 2 * hx;
+      const pz = z + (j / steps - 0.5) * 2 * hz;
+      const h = getTerrainHeight(px, pz);
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+  }
+  return { min, max };
+}
+
+/** Displace an XZ-plane geometry so it follows terrain relative to a parent origin. */
+export function drapeOnTerrain(
+  geometry: THREE.BufferGeometry,
+  originX: number,
+  originZ: number,
+  originY: number,
+  lift = 0.08
+): void {
+  const pos = geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const worldX = originX + pos.getX(i);
+    const worldZ = originZ + pos.getZ(i);
+    pos.setY(i, getTerrainHeight(worldX, worldZ) - originY + lift);
+  }
+  pos.needsUpdate = true;
+}
+
 /**
  * Simple procedural terrain using layered noise.
  * Good enough for Phase 0; will be replaced by a more sophisticated
@@ -13,21 +62,9 @@ export function createTerrain(size = 120): THREE.Mesh {
   const positions = geometry.attributes.position;
   const vertex = new THREE.Vector3();
 
-  // Very lightweight value noise approximation
-  function noise(x: number, z: number): number {
-    const n1 = Math.sin(x * 0.07) * Math.cos(z * 0.09) * 2.2;
-    const n2 = Math.sin(x * 0.19 + 1.7) * Math.cos(z * 0.15) * 0.9;
-    const n3 = Math.sin(x * 0.41) * Math.sin(z * 0.37) * 0.35;
-    return n1 + n2 + n3;
-  }
-
   for (let i = 0; i < positions.count; i++) {
     vertex.fromBufferAttribute(positions, i);
-    const h = noise(vertex.x, vertex.z);
-    // Flatten the center area so the capital sits on relatively flat ground
-    const dist = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
-    const flatten = Math.max(0, 1 - dist / 28);
-    positions.setY(i, h * (1 - flatten * 0.85));
+    positions.setY(i, getTerrainHeight(vertex.x, vertex.z));
   }
 
   geometry.computeVertexNormals();

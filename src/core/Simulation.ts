@@ -151,11 +151,23 @@ export class Simulation {
     return base * (1 + com * 0.25);
   }
 
+  getNationTerritoryRadius(nation: string): number {
+    return nation === this.playerNation ? this.getTerritoryRadius() : 22;
+  }
+
   isInFriendlyTerritory(pos: Vec3, nation: string = this.playerNation): boolean {
-    const radius = nation === this.playerNation ? this.getTerritoryRadius() : 22;
+    const radius = this.getNationTerritoryRadius(nation);
     for (const b of this.buildings.values()) {
       if (b.type !== 'city_center' || b.nation !== nation) continue;
       if (distanceXZ(pos, b.position) <= radius) return true;
+    }
+    return false;
+  }
+
+  isInEnemyTerritory(pos: Vec3, nation: string = this.playerNation): boolean {
+    for (const b of this.buildings.values()) {
+      if (b.type !== 'city_center' || b.nation === nation) continue;
+      if (distanceXZ(pos, b.position) <= this.getNationTerritoryRadius(b.nation)) return true;
     }
     return false;
   }
@@ -528,10 +540,10 @@ export class Simulation {
   }
 
   private updateAttrition(unit: Unit, dt: number, resist: number) {
-    const friendly = this.isInFriendlyTerritory(unit.position, unit.nation);
-    const supplied = friendly || this.isSupplied(unit);
-    unit.underAttrition = !supplied;
-    if (supplied) return;
+    const inEnemy = this.isInEnemyTerritory(unit.position, unit.nation);
+    const supplied = this.isSupplied(unit);
+    unit.underAttrition = inEnemy && !supplied;
+    if (!unit.underAttrition) return;
     // AI gets slight attrition resist so they can siege
     const r = unit.nation === this.playerNation ? resist : Math.max(resist, 0.15);
     unit.hp -= ATTRITION_DPS * (1 - r) * dt;

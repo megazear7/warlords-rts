@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Unit } from '../core/Simulation';
+import { drapeOnTerrain, getTerrainHeight } from './Terrain';
 
 export class UnitMeshes {
   private group = new THREE.Group();
@@ -23,7 +24,8 @@ export class UnitMeshes {
         this.group.add(mesh);
       }
 
-      mesh.position.set(unit.position.x, unit.position.y, unit.position.z);
+      const groundY = getTerrainHeight(unit.position.x, unit.position.z);
+      mesh.position.set(unit.position.x, groundY, unit.position.z);
       // Subtle green pulse when under general aura
       if ((unit as any).inAura) {
         mesh.traverse((c: any) => {
@@ -43,10 +45,13 @@ export class UnitMeshes {
 
       const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
       if (ring) {
-        const mat = ring.material as THREE.MeshBasicMaterial;
-        mat.opacity = selectedIds.has(unit.id) ? 0.85 : 0;
-        if (unit.underAttrition && selectedIds.has(unit.id)) mat.color.setHex(0xffaa33);
-        else if (selectedIds.has(unit.id)) mat.color.setHex(0x44ff88);
+        const selected = selectedIds.has(unit.id);
+        ring.visible = selected;
+        if (selected) {
+          const mat = ring.material as THREE.MeshBasicMaterial;
+          mat.color.setHex(unit.underAttrition ? 0xffaa33 : 0x44ff88);
+          drapeOnTerrain(ring.geometry, unit.position.x, unit.position.z, groundY, 0.08);
+        }
       }
 
       const hpBar = mesh.userData.hpBar as THREE.Mesh | undefined;
@@ -212,18 +217,22 @@ export class UnitMeshes {
       }
     }
 
+    const ringGeo = new THREE.RingGeometry(0.55, 0.75, 32);
+    ringGeo.rotateX(-Math.PI / 2);
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.55, 0.75, 24),
+      ringGeo,
       new THREE.MeshBasicMaterial({
         color: 0x44ff88,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0,
+        opacity: 0.9,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       })
     );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.08;
+    ring.visible = false;
     group.add(ring);
 
     const hpBar = new THREE.Mesh(

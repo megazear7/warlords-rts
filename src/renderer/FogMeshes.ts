@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Simulation } from '../core/Simulation';
+import { getTerrainHeight } from './Terrain';
 
 /**
  * RTS fog-of-war plane:
@@ -37,8 +38,13 @@ export class FogMeshes {
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.needsUpdate = true;
 
-    const geo = new THREE.PlaneGeometry(WORLD, WORLD, 1, 1);
+    const geo = new THREE.PlaneGeometry(WORLD, WORLD, 48, 48);
     geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, getTerrainHeight(pos.getX(i), pos.getZ(i)) + 0.35);
+    }
+    pos.needsUpdate = true;
 
     const mat = new THREE.MeshBasicMaterial({
       map: this.texture,
@@ -48,7 +54,6 @@ export class FogMeshes {
     });
 
     this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.position.y = 0.35; // just above terrain
     this.mesh.renderOrder = 10;
     this.mesh.name = 'fogOfWar';
     scene.add(this.mesh);

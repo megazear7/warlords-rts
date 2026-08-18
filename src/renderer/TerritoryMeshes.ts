@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Simulation, Building } from '../core/Simulation';
 import { NATIONS, NationId } from '../data/nations';
+import { drapeOnTerrain } from './Terrain';
 
 /**
  * Draws translucent territory rings around city centers.
@@ -33,11 +34,14 @@ export class TerritoryMeshes {
         const params = (geo as any).parameters;
         if (!params || Math.abs(params.outerRadius - radius) > 0.5) {
           mesh.geometry.dispose();
-          mesh.geometry = new THREE.RingGeometry(radius - 0.6, radius, 64);
+          const geo = new THREE.RingGeometry(radius - 0.6, radius, 64);
+          geo.rotateX(-Math.PI / 2);
+          mesh.geometry = geo;
         }
       }
 
-      mesh.position.set(city.position.x, 0.05, city.position.z);
+      mesh.position.set(city.position.x, 0, city.position.z);
+      drapeOnTerrain(mesh.geometry, city.position.x, city.position.z, 0, 0.08);
 
       const mat = mesh.material as THREE.MeshBasicMaterial;
       const nationId = city.nation as NationId;
@@ -58,6 +62,7 @@ export class TerritoryMeshes {
 
   private createRing(city: Building, radius: number): THREE.Mesh {
     const geo = new THREE.RingGeometry(radius - 0.6, radius, 64);
+    geo.rotateX(-Math.PI / 2);
     const nationId = city.nation as NationId;
     const color = NATIONS[nationId]?.color ?? 0x888888;
     const mat = new THREE.MeshBasicMaterial({
@@ -66,9 +71,10 @@ export class TerritoryMeshes {
       transparent: true,
       opacity: 0.2,
       depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    return mesh;
+    return new THREE.Mesh(geo, mat);
   }
 }

@@ -3,38 +3,50 @@ import { NATIONS, NationId } from '../data/nations';
 
 const SIZE = 160;
 const WORLD = 120; // matches terrain half-extent-ish
+const FRAME = Math.ceil(SIZE * Math.SQRT2);
 
 export class Minimap {
+  private root: HTMLDivElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
 
   constructor() {
+    this.root = document.createElement('div');
+    this.root.id = 'minimap';
+    this.root.style.cssText = `
+      position: absolute; right: 12px; bottom: 12px;
+      width: ${FRAME}px; height: ${FRAME}px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 15;
+      pointer-events: none;
+    `;
+
     this.canvas = document.createElement('canvas');
-    this.canvas.id = 'minimap';
     this.canvas.width = SIZE;
     this.canvas.height = SIZE;
     this.canvas.style.cssText = `
-      position: absolute; right: 12px; bottom: 12px;
       width: ${SIZE}px; height: ${SIZE}px;
       border-radius: 8px;
       border: 1px solid rgba(255,255,255,0.15);
       background: rgba(0,0,0,0.55);
-      z-index: 15;
-      display: none;
-      pointer-events: none;
+      transform-origin: center center;
     `;
-    document.getElementById('app')?.appendChild(this.canvas);
+    this.root.appendChild(this.canvas);
+    document.getElementById('app')?.appendChild(this.root);
     this.ctx = this.canvas.getContext('2d')!;
   }
 
   setVisible(v: boolean) {
     this.visible = v;
-    this.canvas.style.display = v ? 'block' : 'none';
+    this.root.style.display = v ? 'flex' : 'none';
   }
 
-  update(sim: Simulation) {
+  update(sim: Simulation, cameraTheta = Math.PI / 4) {
     if (!this.visible) return;
+    this.canvas.style.transform = `rotate(${cameraTheta}rad)`;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, SIZE, SIZE);
 

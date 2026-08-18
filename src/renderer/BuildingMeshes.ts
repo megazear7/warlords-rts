@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Building } from '../core/Simulation';
 import { NATIONS, NationId } from '../data/nations';
+import { drapeOnTerrain, sampleTerrainHeightRange } from './Terrain';
 
 export class BuildingMeshes {
   private group = new THREE.Group();
@@ -28,12 +29,27 @@ export class BuildingMeshes {
         this.group.add(mesh);
       }
 
-      mesh.position.set(b.position.x, b.position.y, b.position.z);
+      const pad = this.buildingFootprint(b.type);
+      const { min, max } = sampleTerrainHeightRange(b.position.x, b.position.z, pad.hx, pad.hz);
+      mesh.position.set(b.position.x, max, b.position.z);
 
-      const ring = mesh.userData.selectionRing as THREE.Mesh | undefined;
+      const foundation = mesh.userData.foundation as THREE.Mesh | undefined;
+      if (foundation) {
+        const span = Math.max(0.22, max - min + 0.16);
+        foundation.scale.y = span;
+        foundation.position.y = -span / 2;
+      }
+
+      const ring = mesh.userData.selectionRing as THREE.Group | undefined;
       if (ring) {
-        const mat = ring.material as THREE.MeshBasicMaterial;
-        mat.opacity = selectedBuildingId === b.id ? 0.7 : 0;
+        ring.visible = selectedBuildingId === b.id;
+        if (ring.visible) {
+          for (const child of ring.children) {
+            if (child instanceof THREE.Mesh) {
+              drapeOnTerrain(child.geometry, b.position.x, b.position.z, max, 0.08);
+            }
+          }
+        }
       }
 
       const hpBar = mesh.userData.hpBar as THREE.Mesh | undefined;
@@ -52,6 +68,75 @@ export class BuildingMeshes {
         this.meshes.delete(id);
       }
     }
+  }
+
+  private buildingFootprint(type: string): { hx: number; hz: number } {
+    switch (type) {
+      case 'city_center':
+        return { hx: 3.1, hz: 3.1 };
+      case 'farm':
+      case 'barracks':
+        return { hx: 2.6, hz: 2.6 };
+      case 'library':
+      case 'market':
+        return { hx: 2.4, hz: 2.4 };
+      case 'tower':
+        return { hx: 2.1, hz: 2.1 };
+      case 'wall':
+        return { hx: 2.85, hz: 0.8 };
+      default:
+        return { hx: 1.6, hz: 1.6 };
+    }
+  }
+
+  private selectionRadius(type: string): { inner: number; outer: number } {
+    switch (type) {
+      case 'city_center':
+        return { inner: 5.1, outer: 5.85 };
+      case 'farm':
+      case 'barracks':
+        return { inner: 3.7, outer: 4.3 };
+      case 'library':
+      case 'market':
+        return { inner: 3.4, outer: 4.0 };
+      case 'tower':
+        return { inner: 2.4, outer: 3.0 };
+      case 'wall':
+        return { inner: 3.3, outer: 3.9 };
+      default:
+        return { inner: 2.4, outer: 3.0 };
+    }
+  }
+
+  private createSelectionCircle(type: string): THREE.Group {
+    const { inner, outer } = this.selectionRadius(type);
+    const g = new THREE.Group();
+    const mat = {
+      color: 0x44ff88,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    } as const;
+
+    const fillGeo = new THREE.CircleGeometry(outer, 48);
+    fillGeo.rotateX(-Math.PI / 2);
+    const ringGeo = new THREE.RingGeometry(inner, outer, 48);
+    ringGeo.rotateX(-Math.PI / 2);
+    const fill = new THREE.Mesh(
+      fillGeo,
+      new THREE.MeshBasicMaterial({ ...mat, opacity: 0.2 })
+    );
+    const outline = new THREE.Mesh(
+      ringGeo,
+      new THREE.MeshBasicMaterial({ ...mat, opacity: 0.95 })
+    );
+    g.add(fill);
+    g.add(outline);
+    g.visible = false;
+    return g;
   }
 
   private createPlaceholder(b: Building): THREE.Object3D {
@@ -238,18 +323,16 @@ export class BuildingMeshes {
       group.add(mesh);
     }
 
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(3.2, 3.6, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x44aaff,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-      })
+    const pad = this.buildingFootprint(b.type);
+    const foundation = new THREE.Mesh(
+      new THREE.BoxGeometry(pad.hx * 2, 1, pad.hz * 2),
+      new THREE.MeshStandardMaterial({ color: 0x5a4a38, roughness: 1 })
     );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.1;
+    foundation.position.y = -0.12;
+    foundation.receiveShadow = true;
+    group.add(foundation);
+
+    const ring = this.createSelectionCircle(b.type);
     group.add(ring);
 
     const hpBar = new THREE.Mesh(
@@ -263,6 +346,7 @@ export class BuildingMeshes {
     group.userData.buildingId = b.id;
     group.userData.selectionRing = ring;
     group.userData.hpBar = hpBar;
+    group.userData.foundation = foundation;
     return group;
   }
 }

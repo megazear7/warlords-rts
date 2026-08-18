@@ -290,7 +290,7 @@ export class Game {
 
     if (this.mode === 'playing') {
       this.hud.update(this.simulation, this.ui.getSettings().showFPS ? this.fps : undefined);
-      this.minimap.update(this.simulation);
+      this.minimap.update(this.simulation, this.renderer.cameraTheta);
       this.researchPanel.update(this.simulation);
     }
 
