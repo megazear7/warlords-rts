@@ -16,6 +16,16 @@ npm run dev
 
 Open the URL Vite prints (usually http://localhost:5173). The `predev` hook restores `Simulation.ts` automatically if needed.
 
+## Deploy (Netlify)
+
+This is a static Vite app. In the Netlify UI, connect this GitHub repo and use:
+
+- **Build command:** `npm run build`
+- **Publish directory:** `dist`
+- **Node version:** `20` (set in `netlify.toml` / `.nvmrc`)
+
+`netlify.toml` is already in the repo, so Netlify will pick those settings up automatically.
+
 ## Controls (highlights)
 
 | Key | Action |
