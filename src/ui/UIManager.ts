@@ -53,6 +53,21 @@ export class UIManager {
     this.show('main');
   }
 
+  private syncHomeVideo(onHome: boolean) {
+    const app = document.getElementById('app');
+    const video = document.getElementById('menu-bg-video') as HTMLVideoElement | null;
+    app?.classList.toggle('menu-home', onHome);
+    this.root.classList.toggle('ui-home', onHome);
+    if (!video) return;
+    if (onHome) {
+      video.currentTime = 0;
+      const play = video.play();
+      if (play) void play.catch(() => {});
+    } else {
+      video.pause();
+    }
+  }
+
   get currentScreen() {
     return this.screen;
   }
@@ -69,6 +84,7 @@ export class UIManager {
     this.screen = screen;
     this.root.innerHTML = '';
     this.root.className = screen === 'none' ? 'ui-hidden' : 'ui-visible';
+    this.syncHomeVideo(screen === 'main');
 
     if (screen === 'none') return;
 

@@ -36,6 +36,8 @@ export class Hud {
       document.getElementById('app')?.appendChild(this.root);
     }
 
+    this.root.dataset.frame = 'generic';
+
     this.root.innerHTML = `
       <div class="hud-strip">
         <div class="hud-brand">Warlords <span id="hud-fps"></span></div>
@@ -93,6 +95,10 @@ export class Hud {
     const enemyUnits = sim.getAllUnits().filter((u) => u.nation !== sim.playerNation && u.hp > 0).length;
     const cityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation === sim.playerNation).length;
     const enemyCityCount = sim.getAllBuildings().filter((b) => b.type === 'city_center' && b.nation !== sim.playerNation).length;
+
+    const frame =
+      sim.playerNation === 'rome' || sim.playerNation === 'persia' ? sim.playerNation : 'generic';
+    this.root.dataset.frame = frame;
 
     this.epochEl.textContent = `${nation?.name ?? sim.playerNation} · ${sim.getCurrentEpochName()} · cities ${cityCount}/${sim.getPlayerCityLimit()} · enemy ${enemyCityCount}`;
 

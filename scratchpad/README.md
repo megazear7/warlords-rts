@@ -30,3 +30,7 @@ These were dropped here and moved into the game:
 - `roman-placeholder.png` → `public/portraits/roman-placeholder.png` — Rome units and buildings
 - `general-placeholder.png` → `public/portraits/general-placeholder.png` — non-Roman factions
 - `building-button-placeholder.png` → `public/ui/building-button-placeholder.png` — HUD command buttons
+- `roman-heads-up-display.png` → `public/ui/roman-heads-up-display.png` — Rome HUD frame (2172×724, 3:1)
+- `persian-heads-up-display.png` → `public/ui/persian-heads-up-display.png` — Persia HUD frame (2172×724, 3:1)
+- `generic-heads-up-display.png` → `public/ui/generic-heads-up-display.png` — default HUD frame (2172×724, 3:1)
+- `home-screen-background.mp4` → `public/video/home-screen-background.mp4` — main-menu fullscreen background (1280×720)
